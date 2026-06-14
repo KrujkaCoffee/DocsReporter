@@ -1,6 +1,5 @@
 using DocsApi.Reporter.Dto;
 using DocsApi.Reporter.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DocsApi.Reporter.Controllers;
@@ -11,10 +10,14 @@ namespace DocsApi.Reporter.Controllers;
 public sealed class ProjectCardsController : ControllerBase
 {
     private readonly IProjectCardExplorerService _projectCards;
+    private readonly IProjectCardFileExplorerService _files;
 
-    public ProjectCardsController(IProjectCardExplorerService projectCards)
+    public ProjectCardsController(
+        IProjectCardExplorerService projectCards,
+        IProjectCardFileExplorerService files)
     {
         _projectCards = projectCards;
+        _files = files;
     }
 
     [HttpGet("search")]
@@ -43,16 +46,29 @@ public sealed class ProjectCardsController : ControllerBase
         string sourceCode,
         long objectId,
         [FromQuery] int depth = 1,
+        [FromQuery] int fileDepth = 4,
         CancellationToken ct = default)
     {
         try
         {
-            var result = await _projectCards.GetFullCardAsync(User, sourceCode, objectId, depth, ct);
+            var result = await _projectCards.GetFullCardAsync(User, sourceCode, objectId, depth, fileDepth, ct);
             return result is null ? NotFound() : Ok(result);
         }
         catch (UnauthorizedAccessException)
         {
             return Forbid();
         }
+    }
+
+    [HttpGet("{objectId:long}/file-categories")]
+    public async Task<ActionResult<IReadOnlyList<FileCategoryDto>>> FileCategories(
+        string sourceCode,
+        long objectId,
+        [FromQuery] int fileDepth = 4,
+        [FromQuery] int maxItems = 500,
+        CancellationToken ct = default)
+    {
+        var result = await _files.GetFileCategoriesAsync(User, sourceCode, objectId, fileDepth, maxItems, ct);
+        return Ok(result);
     }
 }

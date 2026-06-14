@@ -170,6 +170,12 @@ USING (
         r.RelationCaption AS DisplayName,
         CASE r.RelationTable
             WHEN N'Papka_TZ_kartochka_pr_1' THEN N'tz'
+            WHEN N'Tekhnicheskoe_zadanie_Kar' THEN N'tz_object'
+            WHEN N'Papka_TZ_Tekhnicheskoe_za' THEN N'tz'
+            WHEN N'Link_899_16' THEN N'tz'
+            WHEN N'Link_891_403_1' THEN N'nomenclature'
+            WHEN N'Link_403_891_1' THEN N'nomenclature'
+            WHEN N'Link_891_403' THEN N'nomenclature'
             WHEN N'Link_891_16' THEN N'vo_cad'
             WHEN N'Link_891_16_1' THEN N'vo_pdf'
             WHEN N'Link_891_16_2' THEN N'root'
@@ -179,10 +185,19 @@ USING (
             WHEN N'Link_891_1802' THEN N'documents'
             WHEN N'Link_1802_16_1' THEN N'documents_root'
             WHEN N'Link_1802_16_2' THEN N'documents_files'
+            WHEN N'DocumentFiles' THEN N'documents_files'
+            WHEN N'Link_Documents_Files' THEN N'documents_files'
+            WHEN N'Link_Documents_Files_1' THEN N'documents_files'
             ELSE N'relation'
         END AS CategoryCode,
         CASE r.RelationTable
             WHEN N'Papka_TZ_kartochka_pr_1' THEN N'ТЗ'
+            WHEN N'Tekhnicheskoe_zadanie_Kar' THEN N'ТЗ'
+            WHEN N'Papka_TZ_Tekhnicheskoe_za' THEN N'ТЗ'
+            WHEN N'Link_899_16' THEN N'ТЗ'
+            WHEN N'Link_891_403_1' THEN N'Изделие проекта'
+            WHEN N'Link_403_891_1' THEN N'Изделие проекта'
+            WHEN N'Link_891_403' THEN N'Изделие проекта'
             WHEN N'Link_891_16' THEN N'ВО CAD'
             WHEN N'Link_891_16_1' THEN N'ВО PDF'
             WHEN N'Link_891_16_2' THEN N'Головная папка'
@@ -190,12 +205,17 @@ USING (
             WHEN N'Link_891_16_4' THEN N'Контроль'
             WHEN N'Link_891_16_5' THEN N'Испытания'
             WHEN N'Link_891_1802' THEN N'Документы КП'
+            WHEN N'Link_1802_16_1' THEN N'Документы КП'
+            WHEN N'Link_1802_16_2' THEN N'Документы КП'
+            WHEN N'DocumentFiles' THEN N'Файлы документов'
+            WHEN N'Link_Documents_Files' THEN N'Файлы документов'
+            WHEN N'Link_Documents_Files_1' THEN N'Файлы документов'
             ELSE r.RelationCaption
         END AS CategoryTitle,
         1 AS CanTraverse,
         1 AS ShowInCard,
         CASE WHEN r.RelationTable IN (
-            N'Papka_TZ_kartochka_pr_1', N'Link_891_16', N'Link_891_16_1',
+            N'Papka_TZ_kartochka_pr_1', N'Papka_TZ_Tekhnicheskoe_za', N'Link_899_16', N'Link_891_16', N'Link_891_16_1',
             N'Link_891_16_2', N'Link_891_16_3', N'Link_891_16_4', N'Link_891_16_5',
             N'Link_1802_16_1', N'Link_1802_16_2', N'DocumentFiles', N'Link_Documents_Files', N'Link_Documents_Files_1'
         ) THEN 1 ELSE 0 END AS ShowInTree,
@@ -207,7 +227,7 @@ USING (
     WHERE r.SourceId = @SourceId
       AND r.RelationTable IN (
         N'Link_891_403_1', N'Link_403_891_1', N'Link_891_403',
-        N'Papka_TZ_kartochka_pr_1',
+        N'Papka_TZ_kartochka_pr_1', N'Tekhnicheskoe_zadanie_Kar', N'Papka_TZ_Tekhnicheskoe_za', N'Link_899_16',
         N'Link_891_16', N'Link_891_16_1', N'Link_891_16_2', N'Link_891_16_3', N'Link_891_16_4', N'Link_891_16_5',
         N'Link_891_1802', N'Link_1802_16_1', N'Link_1802_16_2',
         N'DocumentFiles', N'Link_Documents_Files', N'Link_Documents_Files_1'

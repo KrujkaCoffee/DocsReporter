@@ -9,7 +9,7 @@ namespace DocsApi.Reporter.Services;
 public interface IProjectCardExplorerService
 {
     Task<IReadOnlyList<ProjectCardSearchItemDto>> SearchAsync(ClaimsPrincipal user, string sourceCode, string? query, int page, int pageSize, CancellationToken ct);
-    Task<ProjectCardFullDto?> GetFullCardAsync(ClaimsPrincipal user, string sourceCode, long objectId, int requestedDepth, CancellationToken ct);
+    Task<ProjectCardFullDto?> GetFullCardAsync(ClaimsPrincipal user, string sourceCode, long objectId, int requestedDepth, int requestedFileDepth, CancellationToken ct);
 }
 
 public sealed class ProjectCardExplorerService : IProjectCardExplorerService
@@ -17,11 +17,16 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
     private const int ProjectCardGroupId = 891;
     private readonly IReporterSqlConnectionFactory _factory;
     private readonly IReporterAccessService _access;
+    private readonly IProjectCardFileExplorerService _files;
 
-    public ProjectCardExplorerService(IReporterSqlConnectionFactory factory, IReporterAccessService access)
+    public ProjectCardExplorerService(
+        IReporterSqlConnectionFactory factory,
+        IReporterAccessService access,
+        IProjectCardFileExplorerService files)
     {
         _factory = factory;
         _access = access;
+        _files = files;
     }
 
     public async Task<IReadOnlyList<ProjectCardSearchItemDto>> SearchAsync(
@@ -99,6 +104,7 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         string sourceCode,
         long objectId,
         int requestedDepth,
+        int requestedFileDepth,
         CancellationToken ct)
     {
         //var groupAccess = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
@@ -106,9 +112,11 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         //    throw new UnauthorizedAccessException("No access to open project card.");
 
         var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, 3), 0, 3);
+        var effectiveFileDepth = Math.Clamp(Math.Min(requestedFileDepth, 4), 0, 6);
         //var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, groupAccess.MaxObjectDepth), 0, 3);
+        //var effectiveFileDepth = Math.Clamp(Math.Min(requestedFileDepth, groupAccess.MaxFileTreeDepth), 0, 6);
         //var maxRelated = groupAccess.MaxRelatedObjects;
-        var maxRelated = 3;
+        var maxRelated = 500;
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
         var card = await ReadObjectPreviewAsync(sourceCode, src, ProjectCardGroupId, "Kartochka_proekta", objectId, ct);
@@ -177,18 +185,31 @@ WHERE MasterID = @objectId OR SlaveID = @objectId;";
             }
         }
 
+        var fileCategories = await _files.GetFileCategoriesAsync(
+            user,
+            sourceCode,
+            objectId,
+            effectiveFileDepth,
+            maxRelated,
+            ct);
+
         return new ProjectCardFullDto(
             sourceCode,
             ProjectCardGroupId,
             card,
             relations,
+            fileCategories,
             requestedDepth,
             effectiveDepth,
+            requestedFileDepth,
+            effectiveFileDepth,
             new Dictionary<string, object?>
             {
                 ["projectCardGroupId"] = ProjectCardGroupId,
                 ["projectCardTable"] = "Kartochka_proekta",
-                ["relationCount"] = relations.Count
+                ["relationCount"] = relations.Count,
+                ["fileCategoryCount"] = fileCategories.Count,
+                ["fileCount"] = fileCategories.Sum(x => x.FileCount)
             });
     }
 

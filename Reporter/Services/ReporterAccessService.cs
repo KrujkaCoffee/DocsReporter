@@ -13,6 +13,7 @@ public interface IReporterAccessService
     Task<int> EnsureAppUserAsync(ClaimsPrincipal user, CancellationToken ct);
     Task<EffectiveGroupAccessDto?> GetGroupAccessAsync(ClaimsPrincipal user, string sourceCode, int groupId, CancellationToken ct);
     Task<IReadOnlyList<EffectiveRelationAccessDto>> GetAllowedRelationsAsync(ClaimsPrincipal user, string sourceCode, int groupId, CancellationToken ct);
+    Task<IReadOnlyList<EffectiveRelationAccessDto>> GetAllowedFileRelationsAsync(ClaimsPrincipal user, string sourceCode, CancellationToken ct);
 }
 
 public sealed class ReporterAccessService : IReporterAccessService
@@ -153,4 +154,73 @@ ORDER BY COALESCE(p.CategoryTitle, p.DisplayName, p.RelationTable);";
         }
         return list;
     }
+
+    public async Task<IReadOnlyList<EffectiveRelationAccessDto>> GetAllowedFileRelationsAsync(ClaimsPrincipal user, string sourceCode, CancellationToken ct)
+    {
+        var appUserId = await EnsureAppUserAsync(user, ct);
+        await using var cn = await _factory.OpenAppConnectionAsync(ct);
+        await using var cmd = cn.CreateCommand();
+        cmd.CommandText = @"
+DECLARE @SourceId int = (SELECT SourceId FROM app.Source WHERE Code = @sourceCode AND IsEnabled = 1);
+
+SELECT
+    p.RelationGroupId,
+    p.RelationTable,
+    p.DisplayName,
+    p.CategoryCode,
+    p.CategoryTitle,
+    CAST(MAX(CAST(p.CanTraverse AS int)) AS bit) AS CanTraverse,
+    CAST(MAX(CAST(p.ShowInCard AS int)) AS bit) AS ShowInCard,
+    CAST(MAX(CAST(p.ShowInTree AS int)) AS bit) AS ShowInTree,
+    MAX(p.MaxDepth) AS MaxDepth,
+    MAX(p.MaxItems) AS MaxItems,
+    MAX(p.DirectionMode) AS DirectionMode
+FROM app.RelationAccessPolicy p
+JOIN app.AppUserRole ur ON ur.AppRoleId = p.AppRoleId
+WHERE ur.AppUserId = @appUserId
+  AND p.IsEnabled = 1
+  AND p.CanTraverse = 1
+  AND (p.SourceId IS NULL OR p.SourceId = @SourceId)
+  AND EXISTS (
+      SELECT 1
+      FROM app.TflexRelation r
+      WHERE r.SourceId = @SourceId
+        AND r.RelationTable = p.RelationTable
+  )
+  AND (
+      p.ShowInTree = 1
+      OR p.CategoryCode IN (
+          N'tz', N'tz_object', N'tz_root',
+          N'vo_cad', N'vo_pdf', N'root', N'doc', N'control', N'tests',
+          N'documents', N'documents_root', N'documents_files',
+          N'nomenclature', N'nomenclature_documents'
+      )
+      OR p.RelationTable IN (
+          N'Tekhnicheskoe_zadanie_Kar', N'Papka_TZ_Tekhnicheskoe_za', N'Link_899_16', N'Papka_TZ_kartochka_pr_1',
+          N'Link_891_403_1', N'Link_403_891_1', N'Link_891_403',
+          N'Link_891_1802', N'Link_1802_16_1', N'Link_1802_16_2',
+          N'DocumentFiles', N'Link_Documents_Files', N'Link_Documents_Files_1'
+      )
+  )
+GROUP BY p.RelationGroupId, p.RelationTable, p.DisplayName, p.CategoryCode, p.CategoryTitle
+ORDER BY COALESCE(p.CategoryTitle, p.DisplayName, p.RelationTable);";
+        cmd.Parameters.Add(new SqlParameter("@sourceCode", SqlDbType.NVarChar, 100) { Value = sourceCode });
+        cmd.Parameters.Add(new SqlParameter("@appUserId", SqlDbType.Int) { Value = appUserId });
+
+        var list = new List<EffectiveRelationAccessDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new EffectiveRelationAccessDto(
+                r.IsDBNull(0) ? null : r.GetInt32(0),
+                r.GetString(1),
+                r.IsDBNull(2) ? null : r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.GetBoolean(5), r.GetBoolean(6), r.GetBoolean(7),
+                r.GetInt32(8), r.GetInt32(9), r.GetString(10)));
+        }
+        return list;
+    }
+
 }
