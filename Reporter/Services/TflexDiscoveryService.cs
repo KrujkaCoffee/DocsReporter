@@ -32,7 +32,7 @@ public sealed class TflexDiscoveryService : ITflexDiscoveryService
             {
                 cmd.CommandText = @"
 SELECT
-    pg.ID AS GroupId,
+    pg.PK AS GroupId,
     TRY_CONVERT(uniqueidentifier, pg.Guid) AS GroupGuid,
     pg.TableName,
     pg.Caption,
@@ -54,7 +54,8 @@ WHERE pg.TableName IS NOT NULL;";
                         r.GetInt32Flexible("Type"),
                         r.IsDBNull(r.GetOrdinal("DefaultParameterID")) ? null : r.GetInt32Flexible("DefaultParameterID"),
                         r.IsDBNull(r.GetOrdinal("HierarchyType")) ? null : r.GetInt32Flexible("HierarchyType"),
-                        r.IsDBNull(r.GetOrdinal("Visible")) ? null : r.GetBoolean(r.GetOrdinal("Visible"))));
+                        //r.IsDBNull(r.GetOrdinal("Visible")) ? null : r.GetBoolean(r.GetOrdinal("Visible"))));
+                    ReadNullableBool(r, "Visible")));
                 }
             }
 
@@ -62,7 +63,7 @@ WHERE pg.TableName IS NOT NULL;";
             {
                 cmd.CommandText = @"
 SELECT
-    l.ID AS RelationGroupId,
+    l.PK AS RelationGroupId,
     TRY_CONVERT(uniqueidentifier, l.Guid) AS RelationGuid,
     l.TableName AS RelationTable,
     l.Caption AS RelationCaption,
@@ -89,9 +90,12 @@ WHERE l.[Type] = 5
                         r.IsDBNull(r.GetOrdinal("SlaveGroupID")) ? null : r.GetInt32Flexible("SlaveGroupID"),
                         r.IsDBNull(r.GetOrdinal("LinkType")) ? null : r.GetInt32Flexible("LinkType"),
                         r.IsDBNull(r.GetOrdinal("LinkVisibility")) ? null : r.GetInt32Flexible("LinkVisibility"),
-                        r.IsDBNull(r.GetOrdinal("DoubleDirectionLink")) ? null : r.GetBoolean(r.GetOrdinal("DoubleDirectionLink")),
-                        r.IsDBNull(r.GetOrdinal("IsAsymmetricLink")) ? null : r.GetBoolean(r.GetOrdinal("IsAsymmetricLink")),
-                        r.IsDBNull(r.GetOrdinal("LinkRequired")) ? null : r.GetBoolean(r.GetOrdinal("LinkRequired"))));
+//r.IsDBNull(r.GetOrdinal("DoubleDirectionLink")) ? null : r.GetBoolean(r.GetOrdinal("DoubleDirectionLink")),
+//r.IsDBNull(r.GetOrdinal("IsAsymmetricLink")) ? null : r.GetBoolean(r.GetOrdinal("IsAsymmetricLink")),
+//r.IsDBNull(r.GetOrdinal("LinkRequired")) ? null : r.GetBoolean(r.GetOrdinal("LinkRequired"))));
+ReadNullableBool(r, "DoubleDirectionLink"),
+ReadNullableBool(r, "IsAsymmetricLink"),
+ReadNullableBool(r, "LinkRequired")));
                 }
             }
         }
@@ -316,6 +320,28 @@ VALUES(@SourceId, @RelationGroupId, @RelationGuid, @RelationTable, @RelationCapt
         cmd.Parameters.Add(new SqlParameter("@IsAsymmetricLink", SqlDbType.Bit) { Value = (object?)row.IsAsymmetricLink ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@LinkRequired", SqlDbType.Bit) { Value = (object?)row.LinkRequired ?? DBNull.Value });
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+    private static bool? ReadNullableBool(SqlDataReader reader, string columnName)
+    {
+        int ordinal = reader.GetOrdinal(columnName);
+
+        if (reader.IsDBNull(ordinal))
+            return null;
+
+        object value = reader.GetValue(ordinal);
+
+        return value switch
+        {
+            bool b => b,
+            byte b => b != 0,
+            short s => s != 0,
+            int i => i != 0,
+            long l => l != 0,
+            decimal d => d != 0,
+            string s when bool.TryParse(s, out bool b) => b,
+            string s when int.TryParse(s, out int i) => i != 0,
+            _ => Convert.ToBoolean(value)
+        };
     }
 
     private sealed record TflexGroupRow(int GroupId, Guid? GroupGuid, string TableName, string? Caption, int Type, int? DefaultParameterId, int? HierarchyType, bool? Visible);

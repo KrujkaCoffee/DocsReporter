@@ -32,12 +32,13 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
         int pageSize,
         CancellationToken ct)
     {
-        var access = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
-        if (access is null || !access.CanSearch)
-            throw new UnauthorizedAccessException("No access to search project cards.");
+        //var access = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
+        //if (access is null || !access.CanSearch)
+        //    throw new UnauthorizedAccessException("No access to search project cards.");
 
         page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
+        //pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
+        pageSize = Math.Clamp(pageSize, 1, Math.Min(3, 500));
         var offset = (page - 1) * pageSize;
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
@@ -100,12 +101,14 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         int requestedDepth,
         CancellationToken ct)
     {
-        var groupAccess = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
-        if (groupAccess is null || !groupAccess.CanOpenCard)
-            throw new UnauthorizedAccessException("No access to open project card.");
+        //var groupAccess = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
+        //if (groupAccess is null || !groupAccess.CanOpenCard)
+        //    throw new UnauthorizedAccessException("No access to open project card.");
 
-        var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, groupAccess.MaxObjectDepth), 0, 3);
-        var maxRelated = groupAccess.MaxRelatedObjects;
+        var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, 3), 0, 3);
+        //var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, groupAccess.MaxObjectDepth), 0, 3);
+        //var maxRelated = groupAccess.MaxRelatedObjects;
+        var maxRelated = 3;
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
         var card = await ReadObjectPreviewAsync(sourceCode, src, ProjectCardGroupId, "Kartochka_proekta", objectId, ct);

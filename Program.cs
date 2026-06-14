@@ -1,27 +1,22 @@
 using DocsApi.Configurations;
 using DocsApi.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.OpenApi.Models;
-using System.Runtime;
 using DocsApi.Reporter.Infrastructure;
 using DocsApi.Reporter.Options;
 using DocsApi.Reporter.Services;
-
-
-
+using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.Configure<FileSettings>(builder.Configuration.GetSection("FileServerSettings"));  
-builder.Services.Configure<ProcessTkpRefs>(builder.Configuration.GetSection("ProcessTkpRefs"));
+builder.Services.Configure<FileSettings>(
+    builder.Configuration.GetSection("FileServerSettings"));
 
-// reporter подключение ++
+builder.Services.Configure<ProcessTkpRefs>(
+    builder.Configuration.GetSection("ProcessTkpRefs"));
+
+// Reporter
 builder.Services.Configure<ReporterOptions>(
     builder.Configuration.GetSection("Reporter"));
 
@@ -32,19 +27,29 @@ builder.Services.AddScoped<IProjectCardExplorerService, ProjectCardExplorerServi
 
 builder.Services.AddDbContext<AppDbContext1>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-docs-pkb")));
+
 builder.Services.AddDbContext<AppDbContext2>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-tdocs")));
+
 builder.Services.AddDbContext<AppDbContext3>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-docs")));
 
-builder.Services.AddControllers();
+// Windows Auth / Negotiate
+builder.Services
+    .AddAuthentication(NegotiateDefaults.AuthenticationScheme)
+    .AddNegotiate();
+
+builder.Services.AddAuthorization();
+
+// Swagger
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Docs API", Version = "v1" });
-    c.EnableAnnotations(); 
+    c.EnableAnnotations();
 });
-var app = builder.Build();
 
+var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
@@ -52,6 +57,10 @@ app.UseSwaggerUI();
 app.UseHttpsRedirection();
 
 app.UseRouting();
+
+// ВАЖНО: до MapControllers
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 

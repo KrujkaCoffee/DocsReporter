@@ -7,7 +7,7 @@ namespace DocsApi.Reporter.Controllers;
 
 [ApiController]
 [Route("api/reporter/sources/{sourceCode}/project-cards")]
-[Authorize]
+//[Authorize]
 public sealed class ProjectCardsController : ControllerBase
 {
     private readonly IProjectCardExplorerService _projectCards;
@@ -25,15 +25,17 @@ public sealed class ProjectCardsController : ControllerBase
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        try
-        {
-            var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
+        return Ok(result);
+        //try
+        //{
+        //    var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
+        //    return Ok(result);
+        //}
+        //catch (UnauthorizedAccessException)
+        //{
+        //    return Forbid();
+        //}
     }
 
     [HttpGet("{objectId:long}/full-card")]
