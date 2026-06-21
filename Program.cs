@@ -57,12 +57,20 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
+// Reporter UI is a static, read-only shell over the reporter API.
+// Open: /reporter or /reporter/index.html
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseRouting();
 
-// ÂÀÆÍÎ: äî MapControllers
+// Ð’ÐÐ–ÐÐž: Ð´Ð¾ MapControllers
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/", () => Results.Redirect("/reporter/index.html"));
+app.MapGet("/reporter", () => Results.Redirect("/reporter/index.html"));
 
 app.Run();

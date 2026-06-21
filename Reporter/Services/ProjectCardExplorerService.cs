@@ -43,7 +43,7 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
 
         page = Math.Max(1, page);
         //pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
-        pageSize = Math.Clamp(pageSize, 1, Math.Min(3, 500));
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (page - 1) * pageSize;
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
@@ -123,6 +123,8 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         if (card is null)
             return null;
 
+        var properties = await ReadProjectCardPropertiesAsync(src, objectId, ct);
+
         var relations = new List<RelationItemDto>();
         if (effectiveDepth > 0)
         {
@@ -197,6 +199,7 @@ WHERE MasterID = @objectId OR SlaveID = @objectId;";
             sourceCode,
             ProjectCardGroupId,
             card,
+            properties,
             relations,
             fileCategories,
             requestedDepth,
@@ -207,10 +210,119 @@ WHERE MasterID = @objectId OR SlaveID = @objectId;";
             {
                 ["projectCardGroupId"] = ProjectCardGroupId,
                 ["projectCardTable"] = "Kartochka_proekta",
+                ["propertyCount"] = properties.Count,
                 ["relationCount"] = relations.Count,
                 ["fileCategoryCount"] = fileCategories.Count,
                 ["fileCount"] = fileCategories.Sum(x => x.FileCount)
             });
+    }
+
+
+    private async Task<IReadOnlyList<ProjectCardPropertyDto>> ReadProjectCardPropertiesAsync(
+        SqlConnection src,
+        long objectId,
+        CancellationToken ct)
+    {
+        var result = new List<ProjectCardPropertyDto>();
+
+        await ReadPropertiesFromTableAsync(
+            src,
+            "Kartochka_proekta",
+            objectId,
+            "Карточка проекта",
+            new[]
+            {
+                new PropertyColumn(new[] { "Obekt", "Obect", "Object" }, "object", "Объект", 10),
+                new PropertyColumn(new[] { "Shifr_izdeliya" }, "productCode", "Шифр изделия", 20),
+                new PropertyColumn(new[] { "Nomer_proekta" }, "projectNumber", "Номер проекта", 30),
+                new PropertyColumn(new[] { "Nomer_pozitsii" }, "positionNumber", "Номер позиции", 40),
+                new PropertyColumn(new[] { "Name", "Naimenovanie", "Nazvanie" }, "name", "Наименование", 50),
+                new PropertyColumn(new[] { "Kommentariy", "Comment", "Description" }, "comment", "Комментарий", 90),
+                new PropertyColumn(new[] { "s_CreationDate" }, "createdAt", "Дата создания", 100),
+                new PropertyColumn(new[] { "s_EditDate" }, "editedAt", "Дата изменения", 110),
+            },
+            result,
+            ct);
+
+        await ReadPropertiesFromTableAsync(
+            src,
+            "Kartochka",
+            objectId,
+            "Док-ты КП",
+            new[]
+            {
+                new PropertyColumn(new[] { "Nazvanie_varianta" }, "variantName", "Название варианта", 60),
+                new PropertyColumn(new[] { "Kommentariy", "Comment", "Description" }, "variantComment", "Комментарий варианта", 95),
+            },
+            result,
+            ct);
+
+        return result
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Label)
+            .ToArray();
+    }
+
+    private static async Task ReadPropertiesFromTableAsync(
+        SqlConnection src,
+        string tableName,
+        long objectId,
+        string group,
+        IReadOnlyList<PropertyColumn> requestedColumns,
+        List<ProjectCardPropertyDto> result,
+        CancellationToken ct)
+    {
+        if (!await SqlHelpers.TableExistsAsync(src, "dbo", tableName, ct))
+            return;
+
+        var columns = await SqlHelpers.GetColumnsAsync(src, "dbo", tableName, ct);
+        if (!columns.Contains("s_ObjectID"))
+            return;
+
+        var selected = new List<(PropertyColumn Definition, string ColumnName)>();
+        foreach (var requested in requestedColumns)
+        {
+            var column = SqlHelpers.FirstExisting(columns, requested.Candidates);
+            if (column is not null)
+                selected.Add((requested, column));
+        }
+
+        if (selected.Count == 0)
+            return;
+
+        var selectList = string.Join(",\n    ", selected.Select(x =>
+            $"TRY_CONVERT(nvarchar(max), {SqlHelpers.QuoteName(x.ColumnName)}) AS {SqlHelpers.QuoteName(x.ColumnName)}"));
+        var actualFilter = columns.Contains("s_ActualVersion") ? "AND s_ActualVersion = 1" : string.Empty;
+        var deletedFilter = columns.Contains("s_Deleted") ? "AND s_Deleted = 0" : string.Empty;
+
+        await using var cmd = src.CreateCommand();
+        cmd.CommandTimeout = 30;
+        cmd.CommandText = $@"
+SELECT TOP (1)
+    {selectList}
+FROM dbo.{SqlHelpers.QuoteName(tableName)}
+WHERE s_ObjectID = @objectId
+{actualFilter}
+{deletedFilter};";
+        cmd.Parameters.Add(new SqlParameter("@objectId", SqlDbType.BigInt) { Value = objectId });
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return;
+
+        foreach (var (definition, columnName) in selected)
+        {
+            var value = reader.GetNullableString(columnName);
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            result.Add(new ProjectCardPropertyDto(
+                definition.Code,
+                definition.Label,
+                value,
+                group,
+                definition.SortOrder));
+        }
     }
 
     private async Task<ObjectPreviewDto?> ReadObjectPreviewAsync(string sourceCode, SqlConnection src, int groupId, string tableName, long objectId, CancellationToken ct)
@@ -304,6 +416,8 @@ WHERE s.Code = @sourceCode AND r.RelationTable = @relationTable;";
             r.IsDBNull(1) ? null : r.GetInt32(1),
             r.IsDBNull(2) ? null : r.GetInt32(2));
     }
+
+    private sealed record PropertyColumn(string[] Candidates, string Code, string Label, int SortOrder);
 
     private sealed record RelationMeta(string? RelationCaption, int? MasterGroupId, int? SlaveGroupId);
 }

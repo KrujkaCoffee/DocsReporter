@@ -1,0 +1,2048 @@
+diff -ruN dr_stage3_orig/DocsReporter-master/Program.cs dr_stage3/DocsReporter-master/Program.cs
+--- dr_stage3_orig/DocsReporter-master/Program.cs	2026-06-14 16:06:01.000000000 +0000
++++ dr_stage3/DocsReporter-master/Program.cs	2026-06-14 16:18:15.446832981 +0000
+@@ -57,12 +57,20 @@
+ 
+ app.UseHttpsRedirection();
+ 
++// Reporter UI is a static, read-only shell over the reporter API.
++// Open: /reporter or /reporter/index.html
++app.UseDefaultFiles();
++app.UseStaticFiles();
++
+ app.UseRouting();
+ 
+-// �����: �� MapControllers
++// ВАЖНО: до MapControllers
+ app.UseAuthentication();
+ app.UseAuthorization();
+ 
+ app.MapControllers();
+ 
+-app.Run();
+\ No newline at end of file
++app.MapGet("/", () => Results.Redirect("/reporter/index.html"));
++app.MapGet("/reporter", () => Results.Redirect("/reporter/index.html"));
++
++app.Run();
+diff -ruN dr_stage3_orig/DocsReporter-master/Reporter/Controllers/ReporterUiController.cs dr_stage3/DocsReporter-master/Reporter/Controllers/ReporterUiController.cs
+--- dr_stage3_orig/DocsReporter-master/Reporter/Controllers/ReporterUiController.cs	1970-01-01 00:00:00.000000000 +0000
++++ dr_stage3/DocsReporter-master/Reporter/Controllers/ReporterUiController.cs	2026-06-14 16:15:28.847601658 +0000
+@@ -0,0 +1,61 @@
++using System.Data;
++using DocsApi.Reporter.Dto;
++using DocsApi.Reporter.Infrastructure;
++using Microsoft.AspNetCore.Authorization;
++using Microsoft.AspNetCore.Mvc;
++
++namespace DocsApi.Reporter.Controllers;
++
++[ApiController]
++[AllowAnonymous]
++[Route("api/reporter/ui")]
++public sealed class ReporterUiController : ControllerBase
++{
++    private readonly IReporterSqlConnectionFactory _factory;
++
++    public ReporterUiController(IReporterSqlConnectionFactory factory)
++    {
++        _factory = factory;
++    }
++
++    [HttpGet("config")]
++    public ActionResult<object> Config()
++    {
++        return Ok(new
++        {
++            appTitle = "Docs Reporter",
++            defaultDepth = 2,
++            defaultFileDepth = 4,
++            defaultPageSize = 50,
++            maxPageSize = 100,
++            uiVersion = "stage-3"
++        });
++    }
++
++    [HttpGet("sources")]
++    public async Task<ActionResult<IReadOnlyList<SourceDto>>> Sources(CancellationToken ct = default)
++    {
++        await using var cn = await _factory.OpenAppConnectionAsync(ct);
++        await using var cmd = cn.CreateCommand();
++        cmd.CommandType = CommandType.Text;
++        cmd.CommandText = @"
++SELECT SourceId, Code, DisplayName, BaseDocsUrl, IsEnabled
++FROM app.Source
++WHERE IsEnabled = 1
++ORDER BY DisplayName, Code;";
++
++        var result = new List<SourceDto>();
++        await using var reader = await cmd.ExecuteReaderAsync(ct);
++        while (await reader.ReadAsync(ct))
++        {
++            result.Add(new SourceDto(
++                reader.GetInt32(0),
++                reader.GetString(1),
++                reader.GetString(2),
++                reader.IsDBNull(3) ? null : reader.GetString(3),
++                reader.GetBoolean(4)));
++        }
++
++        return Ok(result);
++    }
++}
+diff -ruN dr_stage3_orig/DocsReporter-master/Reporter/Dto/ReporterDtos.cs dr_stage3/DocsReporter-master/Reporter/Dto/ReporterDtos.cs
+--- dr_stage3_orig/DocsReporter-master/Reporter/Dto/ReporterDtos.cs	2026-06-14 16:06:01.000000000 +0000
++++ dr_stage3/DocsReporter-master/Reporter/Dto/ReporterDtos.cs	2026-06-14 16:14:52.092781255 +0000
+@@ -79,10 +79,19 @@
+     IReadOnlyList<FileTreeNodeDto> Roots,
+     IReadOnlyList<FileTreeNodeDto> FlatFiles);
+ 
++
++public sealed record ProjectCardPropertyDto(
++    string Code,
++    string Label,
++    string? Value,
++    string Group,
++    int SortOrder);
++
+ public sealed record ProjectCardFullDto(
+     string SourceCode,
+     int GroupId,
+     ObjectPreviewDto Card,
++    IReadOnlyList<ProjectCardPropertyDto> Properties,
+     IReadOnlyList<RelationItemDto> Relations,
+     IReadOnlyList<FileCategoryDto> FileCategories,
+     int RequestedDepth,
+diff -ruN dr_stage3_orig/DocsReporter-master/Reporter/README_STAGE3_UI.md dr_stage3/DocsReporter-master/Reporter/README_STAGE3_UI.md
+--- dr_stage3_orig/DocsReporter-master/Reporter/README_STAGE3_UI.md	1970-01-01 00:00:00.000000000 +0000
++++ dr_stage3/DocsReporter-master/Reporter/README_STAGE3_UI.md	2026-06-14 16:18:01.521775948 +0000
+@@ -0,0 +1,61 @@
++# Stage 3 — Reporter UI
++
++Добавлен статический read-only интерфейс для просмотра карточек проектов поверх API Stage 1/2.
++
++## Маршруты
++
++```text
++/reporter
++/reporter/index.html
++```
++
++Корень приложения редиректит на:
++
++```text
++/reporter/index.html
++```
++
++## Что использует UI
++
++```text
++GET /api/reporter/ui/sources
++GET /api/reporter/sources/{sourceCode}/project-cards/search?query=...&page=1&pageSize=50
++GET /api/reporter/sources/{sourceCode}/project-cards/{objectId}/full-card?depth=2&fileDepth=4
++```
++
++`/api/reporter/ui/sources` сделан без `[Authorize]`, чтобы интерфейс можно было гонять до возврата WinAuth. Позднее его можно закрыть общей авторизацией.
++
++## Что отображается
++
++```text
++1. Источник / сервер.
++2. Поиск по карточкам проектов.
++3. Список найденных карточек.
++4. Read-only карточка проекта.
++5. Основные поля карточки.
++6. Файловые категории и дерево файлов.
++7. Связи объекта.
++8. Technical trace для диагностики.
++```
++
++## Визуальный принцип
++
++Интерфейс не копирует T-FLEX DOCs, но сохраняет знакомую логику:
++
++```text
++левая панель  → справочники / режим
++центр         → поиск и список
++правая часть  → свойства, связи, файлы
++```
++
++Цветовая схема сделана в графитовом/конструкторском стиле с оранжевым акцентом и цветными заголовками параметров.
++
++## Что не включено в Stage 3
++
++```text
++- полноценная админка;
++- включение WinAuth;
++- тонкие права T-FLEX;
++- редактирование;
++- общий backend endpoint для multi-source поиска.
++```
+diff -ruN dr_stage3_orig/DocsReporter-master/Reporter/Services/ProjectCardExplorerService.cs dr_stage3/DocsReporter-master/Reporter/Services/ProjectCardExplorerService.cs
+--- dr_stage3_orig/DocsReporter-master/Reporter/Services/ProjectCardExplorerService.cs	2026-06-14 16:06:01.000000000 +0000
++++ dr_stage3/DocsReporter-master/Reporter/Services/ProjectCardExplorerService.cs	2026-06-14 16:15:10.659795694 +0000
+@@ -43,7 +43,7 @@
+ 
+         page = Math.Max(1, page);
+         //pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
+-        pageSize = Math.Clamp(pageSize, 1, Math.Min(3, 500));
++        pageSize = Math.Clamp(pageSize, 1, 100);
+         var offset = (page - 1) * pageSize;
+ 
+         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
+@@ -123,6 +123,8 @@
+         if (card is null)
+             return null;
+ 
++        var properties = await ReadProjectCardPropertiesAsync(src, objectId, ct);
++
+         var relations = new List<RelationItemDto>();
+         if (effectiveDepth > 0)
+         {
+@@ -197,6 +199,7 @@
+             sourceCode,
+             ProjectCardGroupId,
+             card,
++            properties,
+             relations,
+             fileCategories,
+             requestedDepth,
+@@ -207,12 +210,121 @@
+             {
+                 ["projectCardGroupId"] = ProjectCardGroupId,
+                 ["projectCardTable"] = "Kartochka_proekta",
++                ["propertyCount"] = properties.Count,
+                 ["relationCount"] = relations.Count,
+                 ["fileCategoryCount"] = fileCategories.Count,
+                 ["fileCount"] = fileCategories.Sum(x => x.FileCount)
+             });
+     }
+ 
++
++    private async Task<IReadOnlyList<ProjectCardPropertyDto>> ReadProjectCardPropertiesAsync(
++        SqlConnection src,
++        long objectId,
++        CancellationToken ct)
++    {
++        var result = new List<ProjectCardPropertyDto>();
++
++        await ReadPropertiesFromTableAsync(
++            src,
++            "Kartochka_proekta",
++            objectId,
++            "Карточка проекта",
++            new[]
++            {
++                new PropertyColumn(new[] { "Obekt", "Obect", "Object" }, "object", "Объект", 10),
++                new PropertyColumn(new[] { "Shifr_izdeliya" }, "productCode", "Шифр изделия", 20),
++                new PropertyColumn(new[] { "Nomer_proekta" }, "projectNumber", "Номер проекта", 30),
++                new PropertyColumn(new[] { "Nomer_pozitsii" }, "positionNumber", "Номер позиции", 40),
++                new PropertyColumn(new[] { "Name", "Naimenovanie", "Nazvanie" }, "name", "Наименование", 50),
++                new PropertyColumn(new[] { "Kommentariy", "Comment", "Description" }, "comment", "Комментарий", 90),
++                new PropertyColumn(new[] { "s_CreationDate" }, "createdAt", "Дата создания", 100),
++                new PropertyColumn(new[] { "s_EditDate" }, "editedAt", "Дата изменения", 110),
++            },
++            result,
++            ct);
++
++        await ReadPropertiesFromTableAsync(
++            src,
++            "Kartochka",
++            objectId,
++            "Док-ты КП",
++            new[]
++            {
++                new PropertyColumn(new[] { "Nazvanie_varianta" }, "variantName", "Название варианта", 60),
++                new PropertyColumn(new[] { "Kommentariy", "Comment", "Description" }, "variantComment", "Комментарий варианта", 95),
++            },
++            result,
++            ct);
++
++        return result
++            .OrderBy(x => x.SortOrder)
++            .ThenBy(x => x.Label)
++            .ToArray();
++    }
++
++    private static async Task ReadPropertiesFromTableAsync(
++        SqlConnection src,
++        string tableName,
++        long objectId,
++        string group,
++        IReadOnlyList<PropertyColumn> requestedColumns,
++        List<ProjectCardPropertyDto> result,
++        CancellationToken ct)
++    {
++        if (!await SqlHelpers.TableExistsAsync(src, "dbo", tableName, ct))
++            return;
++
++        var columns = await SqlHelpers.GetColumnsAsync(src, "dbo", tableName, ct);
++        if (!columns.Contains("s_ObjectID"))
++            return;
++
++        var selected = new List<(PropertyColumn Definition, string ColumnName)>();
++        foreach (var requested in requestedColumns)
++        {
++            var column = SqlHelpers.FirstExisting(columns, requested.Candidates);
++            if (column is not null)
++                selected.Add((requested, column));
++        }
++
++        if (selected.Count == 0)
++            return;
++
++        var selectList = string.Join(",\n    ", selected.Select(x =>
++            $"TRY_CONVERT(nvarchar(max), {SqlHelpers.QuoteName(x.ColumnName)}) AS {SqlHelpers.QuoteName(x.ColumnName)}"));
++        var actualFilter = columns.Contains("s_ActualVersion") ? "AND s_ActualVersion = 1" : string.Empty;
++        var deletedFilter = columns.Contains("s_Deleted") ? "AND s_Deleted = 0" : string.Empty;
++
++        await using var cmd = src.CreateCommand();
++        cmd.CommandTimeout = 30;
++        cmd.CommandText = $@"
++SELECT TOP (1)
++    {selectList}
++FROM dbo.{SqlHelpers.QuoteName(tableName)}
++WHERE s_ObjectID = @objectId
++{actualFilter}
++{deletedFilter};";
++        cmd.Parameters.Add(new SqlParameter("@objectId", SqlDbType.BigInt) { Value = objectId });
++
++        await using var reader = await cmd.ExecuteReaderAsync(ct);
++        if (!await reader.ReadAsync(ct))
++            return;
++
++        foreach (var (definition, columnName) in selected)
++        {
++            var value = reader.GetNullableString(columnName);
++            if (string.IsNullOrWhiteSpace(value))
++                continue;
++
++            result.Add(new ProjectCardPropertyDto(
++                definition.Code,
++                definition.Label,
++                value,
++                group,
++                definition.SortOrder));
++        }
++    }
++
+     private async Task<ObjectPreviewDto?> ReadObjectPreviewAsync(string sourceCode, SqlConnection src, int groupId, string tableName, long objectId, CancellationToken ct)
+     {
+         if (!await SqlHelpers.TableExistsAsync(src, "dbo", tableName, ct))
+@@ -305,5 +417,7 @@
+             r.IsDBNull(2) ? null : r.GetInt32(2));
+     }
+ 
++    private sealed record PropertyColumn(string[] Candidates, string Code, string Label, int SortOrder);
++
+     private sealed record RelationMeta(string? RelationCaption, int? MasterGroupId, int? SlaveGroupId);
+ }
+diff -ruN dr_stage3_orig/DocsReporter-master/wwwroot/reporter/app.js dr_stage3/DocsReporter-master/wwwroot/reporter/app.js
+--- dr_stage3_orig/DocsReporter-master/wwwroot/reporter/app.js	1970-01-01 00:00:00.000000000 +0000
++++ dr_stage3/DocsReporter-master/wwwroot/reporter/app.js	2026-06-14 16:19:16.190212991 +0000
+@@ -0,0 +1,730 @@
++(() => {
++  const PROJECT_CARD_GROUP_ID = 891;
++  const FALLBACK_SOURCES = [
++    { sourceId: 0, code: 'tdocs', displayName: 'TDOCS', baseDocsUrl: null, isEnabled: true },
++    { sourceId: 0, code: 'docs', displayName: 'DOCS', baseDocsUrl: null, isEnabled: true },
++    { sourceId: 0, code: 'pow', displayName: 'POW', baseDocsUrl: null, isEnabled: true }
++  ];
++
++  const state = {
++    sources: [],
++    selectedSources: new Set(),
++    results: [],
++    activeResultKey: null,
++    activeCard: null,
++    activeTab: 'card',
++    loading: false,
++    lastQuery: ''
++  };
++
++  const $ = (id) => document.getElementById(id);
++  const sourceList = $('sourceList');
++  const searchInput = $('searchInput');
++  const searchBtn = $('searchBtn');
++  const searchResults = $('searchResults');
++  const resultMeta = $('resultMeta');
++  const statusLog = $('statusLog');
++  const depthSelect = $('depthSelect');
++  const fileDepthSelect = $('fileDepthSelect');
++  const pageSizeSelect = $('pageSizeSelect');
++  const manualSourceInput = $('manualSourceInput');
++
++  function get(obj, ...names) {
++    if (obj == null) return undefined;
++    for (const name of names) {
++      if (Object.prototype.hasOwnProperty.call(obj, name)) return obj[name];
++    }
++    return undefined;
++  }
++
++  function asArray(value) {
++    return Array.isArray(value) ? value : [];
++  }
++
++  function escapeHtml(value) {
++    return String(value ?? '')
++      .replaceAll('&', '&amp;')
++      .replaceAll('<', '&lt;')
++      .replaceAll('>', '&gt;')
++      .replaceAll('"', '&quot;')
++      .replaceAll("'", '&#039;');
++  }
++
++  function attr(value) {
++    return escapeHtml(value).replaceAll('`', '&#096;');
++  }
++
++  function setStatus(message, kind = 'info') {
++    const prefix = kind === 'error' ? 'Ошибка' : kind === 'ok' ? 'Готово' : 'Статус';
++    statusLog.textContent = `${prefix}: ${message}`;
++  }
++
++  function setBusy(isBusy, label = 'Найти') {
++    state.loading = isBusy;
++    searchBtn.disabled = isBusy;
++    searchBtn.textContent = isBusy ? 'Идет поиск…' : label;
++  }
++
++  async function fetchJson(url, options = {}) {
++    const response = await fetch(url, {
++      credentials: 'include',
++      headers: { 'Accept': 'application/json' },
++      ...options
++    });
++
++    if (!response.ok) {
++      let details = '';
++      try {
++        const text = await response.text();
++        details = text ? `: ${text.slice(0, 300)}` : '';
++      } catch { /* ignore */ }
++      throw new Error(`${response.status} ${response.statusText}${details}`);
++    }
++
++    if (response.status === 204) return null;
++    return response.json();
++  }
++
++  function loadLocalState() {
++    try {
++      const raw = localStorage.getItem('docsReporter.ui');
++      if (!raw) return;
++      const saved = JSON.parse(raw);
++      if (Array.isArray(saved.selectedSources)) {
++        state.selectedSources = new Set(saved.selectedSources.filter(Boolean));
++      }
++      if (saved.query) searchInput.value = saved.query;
++      if (saved.depth) depthSelect.value = String(saved.depth);
++      if (saved.fileDepth) fileDepthSelect.value = String(saved.fileDepth);
++    } catch { /* ignore broken local storage */ }
++  }
++
++  function saveLocalState() {
++    const payload = {
++      selectedSources: [...state.selectedSources],
++      query: searchInput.value.trim(),
++      depth: depthSelect.value,
++      fileDepth: fileDepthSelect.value
++    };
++    localStorage.setItem('docsReporter.ui', JSON.stringify(payload));
++  }
++
++  function normalizeSource(src) {
++    return {
++      sourceId: get(src, 'sourceId', 'SourceId') ?? 0,
++      code: get(src, 'code', 'Code') ?? '',
++      displayName: get(src, 'displayName', 'DisplayName') ?? get(src, 'code', 'Code') ?? '',
++      baseDocsUrl: get(src, 'baseDocsUrl', 'BaseDocsUrl') ?? null,
++      isEnabled: get(src, 'isEnabled', 'IsEnabled') ?? true
++    };
++  }
++
++  async function loadSources() {
++    sourceList.innerHTML = '<div class="notice"><span class="loader">Загрузка источников</span></div>';
++    try {
++      const sources = await fetchJson('/api/reporter/ui/sources').catch(() => fetchJson('/api/reporter/sources'));
++      state.sources = asArray(sources).map(normalizeSource).filter(s => s.code);
++      if (!state.sources.length) throw new Error('API вернул пустой список источников.');
++      setStatus(`Источников: ${state.sources.length}`, 'ok');
++    } catch (error) {
++      state.sources = FALLBACK_SOURCES;
++      setStatus(`Не удалось получить список источников, включен fallback: ${error.message}`, 'error');
++    }
++
++    if (!state.selectedSources.size && state.sources.length) {
++      state.selectedSources.add(state.sources[0].code);
++    }
++    renderSources();
++    saveLocalState();
++  }
++
++  function renderSources() {
++    const template = $('sourceTemplate');
++    sourceList.innerHTML = '';
++
++    for (const source of state.sources) {
++      const node = template.content.firstElementChild.cloneNode(true);
++      const checkbox = node.querySelector('input');
++      const text = node.querySelector('.source-text');
++      const health = node.querySelector('.source-health');
++      checkbox.checked = state.selectedSources.has(source.code);
++      text.textContent = source.displayName || source.code;
++      text.title = source.code;
++      health.textContent = source.code;
++      node.classList.toggle('active', checkbox.checked);
++      node.addEventListener('change', () => {
++        if (checkbox.checked) state.selectedSources.add(source.code);
++        else state.selectedSources.delete(source.code);
++        node.classList.toggle('active', checkbox.checked);
++        saveLocalState();
++      });
++      node.addEventListener('dblclick', () => checkHealth(source.code, health));
++      sourceList.appendChild(node);
++    }
++  }
++
++  async function checkHealth(sourceCode, healthElement) {
++    healthElement.textContent = '…';
++    healthElement.className = 'source-health';
++    try {
++      const health = await fetchJson(`/api/reporter/sources/${encodeURIComponent(sourceCode)}/health`);
++      healthElement.textContent = 'ok';
++      healthElement.classList.add('ok');
++      setStatus(`${sourceCode}: ${get(health, 'database', 'Database') ?? 'online'}`, 'ok');
++    } catch (error) {
++      healthElement.textContent = '!';
++      healthElement.classList.add('fail');
++      setStatus(`${sourceCode}: ${error.message}`, 'error');
++    }
++  }
++
++  function getSelectedSources() {
++    const selected = [...state.selectedSources].filter(Boolean);
++    return selected.length ? selected : state.sources.slice(0, 1).map(s => s.code);
++  }
++
++  function normalizeSearchItem(item, sourceCode) {
++    const objectId = get(item, 'objectId', 'ObjectId');
++    return {
++      sourceCode: get(item, 'sourceCode', 'SourceCode') ?? sourceCode,
++      objectId,
++      guid: get(item, 'guid', 'Guid'),
++      objectCode: get(item, 'objectCode', 'ObjectCode') ?? '',
++      name: get(item, 'name', 'Name') ?? '',
++      docsUrl: get(item, 'docsUrl', 'DocsUrl') ?? null,
++      key: `${get(item, 'sourceCode', 'SourceCode') ?? sourceCode}:${objectId}`
++    };
++  }
++
++  async function search() {
++    const query = searchInput.value.trim();
++    const selectedSources = getSelectedSources();
++    const pageSize = Number(pageSizeSelect.value || 50);
++    state.lastQuery = query;
++    state.results = [];
++    state.activeResultKey = null;
++    saveLocalState();
++
++    if (!query) {
++      searchResults.className = 'results-list empty-state';
++      searchResults.textContent = 'Введите шифр или часть наименования.';
++      resultMeta.textContent = 'Нет данных';
++      return;
++    }
++
++    setBusy(true);
++    searchResults.className = 'results-list';
++    searchResults.innerHTML = '<div class="notice"><span class="loader">Поиск по выбранным источникам</span></div>';
++    resultMeta.textContent = selectedSources.join(', ');
++
++    const tasks = selectedSources.map(async (sourceCode) => {
++      const url = `/api/reporter/sources/${encodeURIComponent(sourceCode)}/project-cards/search?query=${encodeURIComponent(query)}&page=1&pageSize=${pageSize}`;
++      try {
++        const data = await fetchJson(url);
++        return { sourceCode, ok: true, items: asArray(data).map(x => normalizeSearchItem(x, sourceCode)) };
++      } catch (error) {
++        return { sourceCode, ok: false, error: error.message, items: [] };
++      }
++    });
++
++    const responses = await Promise.all(tasks);
++    state.results = responses.flatMap(x => x.items);
++    renderSearchResults(responses);
++    const failed = responses.filter(x => !x.ok);
++    if (failed.length) {
++      setStatus(`Поиск завершен частично. Ошибки: ${failed.map(x => x.sourceCode).join(', ')}`, 'error');
++    } else {
++      setStatus(`Найдено: ${state.results.length}`, 'ok');
++    }
++    setBusy(false);
++  }
++
++  function renderSearchResults(responses) {
++    const total = responses.reduce((acc, r) => acc + r.items.length, 0);
++    resultMeta.textContent = `${total} найдено`;
++
++    if (!total && responses.every(r => r.ok)) {
++      searchResults.className = 'results-list empty-state';
++      searchResults.textContent = 'Ничего не найдено. Попробуйте другой шифр или включите другой source.';
++      return;
++    }
++
++    const html = responses.map(response => {
++      const title = `<div class="result-group-title"><span>${escapeHtml(response.sourceCode)}</span><span>${response.ok ? response.items.length + ' шт.' : 'ошибка'}</span></div>`;
++      if (!response.ok) {
++        return `${title}<div class="notice">${escapeHtml(response.error)}</div>`;
++      }
++      if (!response.items.length) {
++        return `${title}<div class="notice">Нет совпадений.</div>`;
++      }
++      return title + response.items.map(item => renderResultCard(item)).join('');
++    }).join('');
++
++    searchResults.className = 'results-list';
++    searchResults.innerHTML = html;
++    searchResults.querySelectorAll('[data-result-key]').forEach(node => {
++      node.addEventListener('click', () => {
++        const key = node.getAttribute('data-result-key');
++        const item = state.results.find(x => x.key === key);
++        if (item) openCard(item);
++      });
++    });
++  }
++
++  function renderResultCard(item) {
++    const code = item.objectCode || `Object ${item.objectId}`;
++    const name = item.name || 'Без наименования';
++    return `
++      <button type="button" class="result-card ${state.activeResultKey === item.key ? 'active' : ''}" data-result-key="${attr(item.key)}">
++        <span class="result-main">
++          <span class="result-code">${escapeHtml(code)}</span>
++          <span class="result-name">${escapeHtml(name)}</span>
++          <span class="result-sub">objectId: ${escapeHtml(item.objectId)}${item.guid ? ' · ' + escapeHtml(item.guid) : ''}</span>
++        </span>
++        <span class="badge">${escapeHtml(item.sourceCode)}</span>
++      </button>`;
++  }
++
++  async function openCard(item) {
++    state.activeResultKey = item.key;
++    renderSearchResults(groupCurrentResults());
++    const depth = Number(depthSelect.value || 2);
++    const fileDepth = Number(fileDepthSelect.value || 4);
++    const detailsRoot = $('detailsRoot');
++    detailsRoot.className = 'details-empty';
++    detailsRoot.innerHTML = '<div class="notice"><span class="loader">Загрузка карточки и файловых категорий</span></div>';
++
++    try {
++      const url = `/api/reporter/sources/${encodeURIComponent(item.sourceCode)}/project-cards/${encodeURIComponent(item.objectId)}/full-card?depth=${depth}&fileDepth=${fileDepth}`;
++      const card = await fetchJson(url);
++      state.activeCard = card;
++      state.activeTab = 'card';
++      renderDetails();
++      const cardDto = normalizeCard(card);
++      setStatus(`Открыта карточка ${cardDto.card.objectCode || cardDto.card.objectId}`, 'ok');
++      updateUrl(item);
++    } catch (error) {
++      detailsRoot.className = 'details-empty';
++      detailsRoot.innerHTML = `<div class="empty-card"><div class="empty-icon">!</div><h2>Не удалось открыть карточку</h2><p>${escapeHtml(error.message)}</p></div>`;
++      setStatus(error.message, 'error');
++    }
++  }
++
++  function groupCurrentResults() {
++    const map = new Map();
++    for (const item of state.results) {
++      if (!map.has(item.sourceCode)) map.set(item.sourceCode, []);
++      map.get(item.sourceCode).push(item);
++    }
++    return [...map].map(([sourceCode, items]) => ({ sourceCode, ok: true, items }));
++  }
++
++  function normalizePreview(preview) {
++    return {
++      groupId: get(preview, 'groupId', 'GroupId'),
++      tableName: get(preview, 'tableName', 'TableName'),
++      objectId: get(preview, 'objectId', 'ObjectId'),
++      guid: get(preview, 'guid', 'Guid'),
++      objectCode: get(preview, 'objectCode', 'ObjectCode'),
++      name: get(preview, 'name', 'Name'),
++      docsUrl: get(preview, 'docsUrl', 'DocsUrl')
++    };
++  }
++
++
++  function normalizeProperty(raw) {
++    return {
++      code: get(raw, 'code', 'Code') ?? '',
++      label: get(raw, 'label', 'Label') ?? '',
++      value: get(raw, 'value', 'Value') ?? '',
++      group: get(raw, 'group', 'Group') ?? 'Карточка',
++      sortOrder: get(raw, 'sortOrder', 'SortOrder') ?? 0
++    };
++  }
++
++  function normalizeCard(card) {
++    return {
++      sourceCode: get(card, 'sourceCode', 'SourceCode'),
++      groupId: get(card, 'groupId', 'GroupId') ?? PROJECT_CARD_GROUP_ID,
++      card: normalizePreview(get(card, 'card', 'Card') ?? {}),
++      properties: asArray(get(card, 'properties', 'Properties')).map(normalizeProperty),
++      relations: asArray(get(card, 'relations', 'Relations')),
++      fileCategories: asArray(get(card, 'fileCategories', 'FileCategories')),
++      requestedDepth: get(card, 'requestedDepth', 'RequestedDepth'),
++      effectiveDepth: get(card, 'effectiveDepth', 'EffectiveDepth'),
++      requestedFileDepth: get(card, 'requestedFileDepth', 'RequestedFileDepth'),
++      effectiveFileDepth: get(card, 'effectiveFileDepth', 'EffectiveFileDepth'),
++      technicalTrace: get(card, 'technicalTrace', 'TechnicalTrace') ?? {}
++    };
++  }
++
++  function renderDetails() {
++    if (!state.activeCard) return;
++    const dto = normalizeCard(state.activeCard);
++    const card = dto.card;
++    const title = card.objectCode || card.name || `Object ${card.objectId}`;
++
++    const detailsRoot = $('detailsRoot');
++    detailsRoot.className = 'details-root';
++    detailsRoot.innerHTML = `
++      <div class="card-hero">
++        <div class="card-yellow-strip">${escapeHtml(title)}</div>
++        <div class="card-hero-meta">
++          <span>${escapeHtml(dto.sourceCode)} · groupId ${escapeHtml(dto.groupId)} · objectId ${escapeHtml(card.objectId)}</span>
++          ${card.docsUrl ? `<a class="docs-link" href="${attr(card.docsUrl)}" target="_blank" rel="noreferrer">Открыть в DOCs</a>` : ''}
++        </div>
++      </div>
++      <div class="tabbar">
++        ${tabButton('card', 'Карточка')}
++        ${tabButton('files', `Файлы (${countFiles(dto.fileCategories)})`)}
++        ${tabButton('relations', `Связи (${dto.relations.length})`)}
++        ${tabButton('tech', 'Технически')}
++      </div>
++      <div id="tabContent" class="tab-content"></div>`;
++
++    detailsRoot.querySelectorAll('[data-tab]').forEach(btn => {
++      btn.addEventListener('click', () => {
++        state.activeTab = btn.getAttribute('data-tab') || 'card';
++        renderDetails();
++      });
++    });
++
++    const tabContent = $('tabContent');
++    if (state.activeTab === 'files') tabContent.innerHTML = renderFiles(dto.fileCategories);
++    else if (state.activeTab === 'relations') tabContent.innerHTML = renderRelations(dto.relations);
++    else if (state.activeTab === 'tech') tabContent.innerHTML = renderTech(dto);
++    else tabContent.innerHTML = renderCardTab(dto);
++  }
++
++  function tabButton(tab, title) {
++    return `<button type="button" class="tab-button ${state.activeTab === tab ? 'active' : ''}" data-tab="${attr(tab)}">${escapeHtml(title)}</button>`;
++  }
++
++  function countFiles(categories) {
++    return categories.reduce((acc, c) => acc + Number(get(c, 'fileCount', 'FileCount') || 0), 0);
++  }
++
++  function renderCardTab(dto) {
++    const card = dto.card;
++    const propertyMap = new Map(dto.properties.map(p => [p.code, p]));
++    const prop = (code) => propertyMap.get(code)?.value;
++    const objectCode = prop('object') || prop('productCode') || card.objectCode || '';
++    const parts = splitProjectCode(objectCode || '');
++    const projectNumber = prop('projectNumber') || parts.project || '—';
++    const positionNumber = prop('positionNumber') || parts.position || '—';
++    const displayName = prop('name') || card.name || '—';
++    const comment = prop('comment') || prop('variantComment') || 'Read-only карточка проекта. Редактирование намеренно не предусмотрено.';
++    const relationGroups = groupRelations(dto.relations);
++    return `
++      <div class="info-grid">
++        ${infoCell('Шифр изделия', objectCode || parts.prefix || '—', 'green')}
++        ${infoCell('Номер проекта', projectNumber, 'blue')}
++        ${infoCell('Номер позиции', positionNumber, 'orange')}
++        ${infoCell('Наименование', displayName, 'red')}
++      </div>
++      <div class="card-comment">
++        <div class="card-comment-title">Комментарий</div>
++        <div class="card-comment-body">${escapeHtml(comment)}</div>
++      </div>
++      <div class="summary-strip">
++        ${metric(dto.fileCategories.length, 'категорий файлов')}
++        ${metric(countFiles(dto.fileCategories), 'файлов')}
++        ${metric(dto.relations.length, 'связей')}
++        ${metric(dto.properties.length, 'полей')}
++      </div>
++      ${renderProperties(dto.properties)}
++      <div class="relation-group">
++        <div class="relation-head">
++          <div><div class="relation-title">Краткая карточка</div><div class="relation-meta">основные идентификаторы</div></div>
++        </div>
++        <table class="table-like">
++          <tbody>
++            <tr><th>Source</th><td>${escapeHtml(dto.sourceCode)}</td></tr>
++            <tr><th>Group</th><td>${escapeHtml(dto.groupId)} / ${escapeHtml(card.tableName || 'Kartochka_proekta')}</td></tr>
++            <tr><th>ObjectID</th><td>${escapeHtml(card.objectId)}</td></tr>
++            <tr><th>GUID</th><td>${escapeHtml(card.guid || '—')}</td></tr>
++            <tr><th>DOCs URL</th><td>${card.docsUrl ? `<a class="docs-link" href="${attr(card.docsUrl)}" target="_blank" rel="noreferrer">${escapeHtml(card.docsUrl)}</a>` : '—'}</td></tr>
++          </tbody>
++        </table>
++      </div>
++      ${Object.keys(relationGroups).length ? `<div class="notice">Быстрые группы связей: ${escapeHtml(Object.keys(relationGroups).join(', '))}</div>` : ''}
++    `;
++  }
++
++  function renderProperties(properties) {
++    if (!properties.length) {
++      return '<div class="notice">Список полей пока пуст. API вернул только preview карточки.</div>';
++    }
++
++    const groups = new Map();
++    for (const property of properties) {
++      if (!groups.has(property.group)) groups.set(property.group, []);
++      groups.get(property.group).push(property);
++    }
++
++    return [...groups.entries()].map(([group, items]) => `
++      <div class="relation-group">
++        <div class="relation-head">
++          <div><div class="relation-title">${escapeHtml(group)}</div><div class="relation-meta">${items.length} полей</div></div>
++        </div>
++        <table class="table-like">
++          <tbody>
++            ${items.map(item => `<tr><th>${escapeHtml(item.label)}</th><td>${escapeHtml(item.value || '—')}</td></tr>`).join('')}
++          </tbody>
++        </table>
++      </div>`).join('');
++  }
++
++  function splitProjectCode(code) {
++    const value = String(code || '').trim();
++    const match = value.match(/^([А-ЯA-ZЁ]{1,4})[.\-_\s]?(\d+)(?:[.\-_\s]?(\d+))?/i);
++    if (!match) return { prefix: value, project: '', position: '' };
++    return { prefix: match[1], project: match[2], position: match[3] || '' };
++  }
++
++  function infoCell(label, value, colorClass = '') {
++    return `<div class="info-cell"><div class="info-label ${attr(colorClass)}">${escapeHtml(label)}</div><div class="info-value">${escapeHtml(value)}</div></div>`;
++  }
++
++  function metric(value, label) {
++    return `<div class="metric"><div class="metric-value">${escapeHtml(value)}</div><div class="metric-label">${escapeHtml(label)}</div></div>`;
++  }
++
++  function renderFiles(categoriesRaw) {
++    const categories = asArray(categoriesRaw);
++    if (!categories.length) return '<div class="notice">Файловые категории не найдены. Проверьте bootstrap relations и связи Link_891_16 / DocumentFiles.</div>';
++
++    return categories.map(categoryRaw => {
++      const category = normalizeCategory(categoryRaw);
++      const rootsHtml = category.roots.length
++        ? category.roots.map(node => renderTreeNode(node, 0)).join('')
++        : category.flatFiles.length
++          ? category.flatFiles.map(node => renderTreeNode(node, 0)).join('')
++          : '<div class="notice">В категории нет файлов.</div>';
++      return `
++        <div class="category-card">
++          <div class="category-head">
++            <div>
++              <div class="category-title">${escapeHtml(category.title || category.code)}</div>
++              <div class="category-meta">${escapeHtml(category.relationTable || 'relation auto')} · roots: ${category.rootCount}</div>
++            </div>
++            <span class="badge">${category.fileCount} файлов</span>
++          </div>
++          <div class="tree">${rootsHtml}</div>
++        </div>`;
++    }).join('');
++  }
++
++  function normalizeCategory(raw) {
++    return {
++      code: get(raw, 'code', 'Code') ?? '',
++      title: get(raw, 'title', 'Title') ?? '',
++      relationTable: get(raw, 'relationTable', 'RelationTable') ?? '',
++      rootCount: get(raw, 'rootCount', 'RootCount') ?? 0,
++      fileCount: get(raw, 'fileCount', 'FileCount') ?? 0,
++      roots: asArray(get(raw, 'roots', 'Roots')).map(normalizeFileNode),
++      flatFiles: asArray(get(raw, 'flatFiles', 'FlatFiles')).map(normalizeFileNode)
++    };
++  }
++
++  function normalizeFileNode(raw) {
++    return {
++      sourceCode: get(raw, 'sourceCode', 'SourceCode') ?? '',
++      objectId: get(raw, 'objectId', 'ObjectId'),
++      version: get(raw, 'version', 'Version'),
++      guid: get(raw, 'guid', 'Guid'),
++      parentId: get(raw, 'parentId', 'ParentId'),
++      name: get(raw, 'name', 'Name') ?? `Object ${get(raw, 'objectId', 'ObjectId')}`,
++      extension: get(raw, 'extension', 'Extension') ?? '',
++      nodeKind: get(raw, 'nodeKind', 'NodeKind') ?? 'file',
++      stage: get(raw, 'stage', 'Stage') ?? '',
++      downloadUrl: get(raw, 'downloadUrl', 'DownloadUrl') ?? '',
++      children: asArray(get(raw, 'children', 'Children')).map(normalizeFileNode)
++    };
++  }
++
++  function renderTreeNode(node, level) {
++    const isFile = String(node.nodeKind || '').toLowerCase() === 'file';
++    const icon = isFile ? fileIcon(node.extension) : '📁';
++    const name = node.downloadUrl && isFile
++      ? `<a class="file-link" href="${attr(node.downloadUrl)}" target="_blank" rel="noreferrer">${escapeHtml(node.name)}</a>`
++      : `<span class="node-name">${escapeHtml(node.name)}</span>`;
++    const meta = [node.stage, node.version ? `ред. ${node.version}` : null, node.extension].filter(Boolean).join(' · ');
++    const children = node.children.length
++      ? `<div class="node-children">${node.children.map(child => renderTreeNode(child, level + 1)).join('')}</div>`
++      : '';
++
++    return `
++      <div class="tree-node" style="--level:${level}">
++        <div class="node-line">
++          <span>${icon}</span>
++          ${name}
++          ${meta ? `<span class="node-meta">${escapeHtml(meta)}</span>` : ''}
++        </div>
++        ${children}
++      </div>`;
++  }
++
++  function fileIcon(ext) {
++    const e = String(ext || '').toLowerCase();
++    if (['pdf'].includes(e)) return '📕';
++    if (['grb', 'dwg', 'dxf', 'step', 'stp'].includes(e)) return '📐';
++    if (['doc', 'docx', 'rtf'].includes(e)) return '📄';
++    if (['xls', 'xlsx', 'csv'].includes(e)) return '📊';
++    if (['zip', 'rar', '7z'].includes(e)) return '🗜️';
++    return '📄';
++  }
++
++  function normalizeRelation(raw) {
++    const targetRaw = get(raw, 'target', 'Target');
++    return {
++      relationTable: get(raw, 'relationTable', 'RelationTable') ?? '',
++      displayName: get(raw, 'displayName', 'DisplayName') ?? '',
++      categoryCode: get(raw, 'categoryCode', 'CategoryCode') ?? '',
++      categoryTitle: get(raw, 'categoryTitle', 'CategoryTitle') ?? '',
++      direction: get(raw, 'direction', 'Direction') ?? '',
++      masterId: get(raw, 'masterId', 'MasterId'),
++      slaveId: get(raw, 'slaveId', 'SlaveId'),
++      target: targetRaw ? normalizePreview(targetRaw) : null
++    };
++  }
++
++  function groupRelations(relationsRaw) {
++    const groups = {};
++    for (const relRaw of asArray(relationsRaw)) {
++      const rel = normalizeRelation(relRaw);
++      const key = rel.categoryTitle || rel.displayName || rel.relationTable || 'Связь';
++      if (!groups[key]) groups[key] = [];
++      groups[key].push(rel);
++    }
++    return groups;
++  }
++
++  function renderRelations(relationsRaw) {
++    const groups = groupRelations(relationsRaw);
++    const names = Object.keys(groups);
++    if (!names.length) return '<div class="notice">Связи не найдены или не разрешены политикой RelationAccessPolicy.</div>';
++
++    return names.map(name => {
++      const rows = groups[name].map(rel => {
++        const target = rel.target;
++        const targetLabel = target ? `${target.objectCode || ''} ${target.name || ''}`.trim() || `Object ${target.objectId}` : '—';
++        return `<tr>
++          <td>${escapeHtml(rel.direction)}</td>
++          <td>${escapeHtml(rel.relationTable)}</td>
++          <td>${escapeHtml(rel.masterId)}</td>
++          <td>${escapeHtml(rel.slaveId)}</td>
++          <td>${target?.docsUrl ? `<a class="docs-link" href="${attr(target.docsUrl)}" target="_blank" rel="noreferrer">${escapeHtml(targetLabel)}</a>` : escapeHtml(targetLabel)}</td>
++        </tr>`;
++      }).join('');
++      return `
++        <div class="relation-group">
++          <div class="relation-head">
++            <div>
++              <div class="relation-title">${escapeHtml(name)}</div>
++              <div class="relation-meta">${groups[name].length} связей</div>
++            </div>
++          </div>
++          <table class="table-like">
++            <thead><tr><th>Напр.</th><th>Таблица связи</th><th>MasterID</th><th>SlaveID</th><th>Цель</th></tr></thead>
++            <tbody>${rows}</tbody>
++          </table>
++        </div>`;
++    }).join('');
++  }
++
++  function renderTech(dto) {
++    return `
++      <div class="summary-strip">
++        ${metric(dto.requestedDepth ?? '—', 'requested depth')}
++        ${metric(dto.effectiveDepth ?? '—', 'effective depth')}
++        ${metric(dto.requestedFileDepth ?? '—', 'requested file depth')}
++        ${metric(dto.effectiveFileDepth ?? '—', 'effective file depth')}
++      </div>
++      <div class="tech-box">
++        <div class="relation-head">
++          <div><div class="relation-title">Technical trace</div><div class="relation-meta">для диагностики discovery/relations</div></div>
++        </div>
++        <pre class="raw-json">${escapeHtml(JSON.stringify(dto.technicalTrace, null, 2))}</pre>
++      </div>
++      <div class="tech-box">
++        <div class="relation-head">
++          <div><div class="relation-title">Raw card DTO</div><div class="relation-meta">как пришло из API</div></div>
++        </div>
++        <pre class="raw-json">${escapeHtml(JSON.stringify(state.activeCard, null, 2))}</pre>
++      </div>`;
++  }
++
++  function updateUrl(item) {
++    const url = new URL(window.location.href);
++    url.searchParams.set('source', item.sourceCode);
++    url.searchParams.set('objectId', item.objectId);
++    if (state.lastQuery) url.searchParams.set('q', state.lastQuery);
++    history.replaceState(null, '', url.toString());
++  }
++
++  function addManualSource() {
++    const code = manualSourceInput.value.trim();
++    if (!code) return;
++    if (!state.sources.some(s => s.code.toLowerCase() === code.toLowerCase())) {
++      state.sources.push({ sourceId: 0, code, displayName: code, baseDocsUrl: null, isEnabled: true });
++    }
++    state.selectedSources.add(code);
++    manualSourceInput.value = '';
++    renderSources();
++    saveLocalState();
++  }
++
++  async function openFromQueryParams() {
++    const url = new URL(window.location.href);
++    const q = url.searchParams.get('q');
++    const source = url.searchParams.get('source');
++    const objectId = url.searchParams.get('objectId');
++    if (q) searchInput.value = q;
++    if (source) state.selectedSources.add(source);
++    renderSources();
++    if (source && objectId) {
++      await openCard({ sourceCode: source, objectId, objectCode: q || '', name: '', key: `${source}:${objectId}` });
++    } else if (q) {
++      await search();
++    }
++  }
++
++  function bindEvents() {
++    searchBtn.addEventListener('click', search);
++    searchInput.addEventListener('keydown', (event) => {
++      if (event.key === 'Enter') search();
++    });
++    $('reloadSourcesBtn').addEventListener('click', loadSources);
++    $('selectAllSourcesBtn').addEventListener('click', () => {
++      const allSelected = state.sources.every(s => state.selectedSources.has(s.code));
++      if (allSelected) state.selectedSources.clear();
++      else state.sources.forEach(s => state.selectedSources.add(s.code));
++      renderSources();
++      saveLocalState();
++    });
++    $('addManualSourceBtn').addEventListener('click', addManualSource);
++    manualSourceInput.addEventListener('keydown', (event) => {
++      if (event.key === 'Enter') addManualSource();
++    });
++    depthSelect.addEventListener('change', saveLocalState);
++    fileDepthSelect.addEventListener('change', saveLocalState);
++    pageSizeSelect.addEventListener('change', saveLocalState);
++    $('toggleThemeBtn').addEventListener('click', () => {
++      document.body.classList.toggle('high-contrast');
++      localStorage.setItem('docsReporter.highContrast', document.body.classList.contains('high-contrast') ? '1' : '0');
++    });
++  }
++
++  async function init() {
++    bindEvents();
++    loadLocalState();
++    if (localStorage.getItem('docsReporter.highContrast') === '1') document.body.classList.add('high-contrast');
++    await loadSources();
++    await openFromQueryParams();
++  }
++
++  init().catch(error => {
++    setStatus(error.message, 'error');
++  });
++})();
+diff -ruN dr_stage3_orig/DocsReporter-master/wwwroot/reporter/index.html dr_stage3/DocsReporter-master/wwwroot/reporter/index.html
+--- dr_stage3_orig/DocsReporter-master/wwwroot/reporter/index.html	1970-01-01 00:00:00.000000000 +0000
++++ dr_stage3/DocsReporter-master/wwwroot/reporter/index.html	2026-06-14 16:16:11.891116194 +0000
+@@ -0,0 +1,150 @@
++<!doctype html>
++<html lang="ru">
++<head>
++  <meta charset="utf-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Docs Reporter</title>
++  <link rel="stylesheet" href="./styles.css" />
++</head>
++<body>
++  <div class="app-shell">
++    <aside class="left-rail">
++      <div class="brand">
++        <div class="brand-mark">DR</div>
++        <div>
++          <div class="brand-title">Docs Reporter</div>
++          <div class="brand-subtitle">read-only explorer</div>
++        </div>
++      </div>
++
++      <section class="rail-section">
++        <div class="section-title">Источники</div>
++        <div id="sourceList" class="source-list"></div>
++        <div class="source-tools">
++          <button id="reloadSourcesBtn" class="ghost-btn" type="button">Обновить</button>
++          <button id="selectAllSourcesBtn" class="ghost-btn" type="button">Все</button>
++        </div>
++        <label class="field-label compact" for="manualSourceInput">Ручной source</label>
++        <div class="inline-control">
++          <input id="manualSourceInput" type="text" placeholder="tdocs" />
++          <button id="addManualSourceBtn" type="button" class="square-btn">+</button>
++        </div>
++      </section>
++
++      <section class="rail-section">
++        <div class="section-title">Справочники MVP</div>
++        <nav class="dictionary-list" aria-label="Справочники">
++          <button class="dictionary-item active" type="button" data-dictionary="Kartochka_proekta">
++            <span class="dict-icon project"></span>
++            <span>Карточки проектов</span>
++          </button>
++          <button class="dictionary-item" type="button" data-dictionary="Nomenclature" disabled>
++            <span class="dict-icon nomenclature"></span>
++            <span>ЭСИ / Nomenclature</span>
++          </button>
++          <button class="dictionary-item" type="button" data-dictionary="Files" disabled>
++            <span class="dict-icon files"></span>
++            <span>Файлы</span>
++          </button>
++          <button class="dictionary-item" type="button" data-dictionary="Documents" disabled>
++            <span class="dict-icon docs"></span>
++            <span>Документы</span>
++          </button>
++        </nav>
++      </section>
++
++      <section class="rail-section diagnostics" id="diagnosticsPanel">
++        <div class="section-title">Состояние</div>
++        <div id="statusLog" class="status-log">Готов к поиску.</div>
++      </section>
++    </aside>
++
++    <main class="workspace">
++      <header class="topbar">
++        <div class="topbar-title">
++          <span class="breadcrumb">Справочники / Карточки проектов</span>
++          <h1>Поиск и просмотр карточек проекта</h1>
++        </div>
++        <div class="topbar-actions">
++          <button id="toggleThemeBtn" class="ghost-btn" type="button" title="Переключить плотность/контраст">Контраст</button>
++          <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
++        </div>
++      </header>
++
++      <section class="search-panel">
++        <div class="search-row">
++          <label class="search-box" for="searchInput">
++            <span class="search-icon">⌕</span>
++            <input id="searchInput" type="search" placeholder="КТ.2110054.03 или часть наименования" autocomplete="off" />
++          </label>
++          <button id="searchBtn" class="primary-btn" type="button">Найти</button>
++        </div>
++        <div class="search-options">
++          <label>
++            <span>Глубина связей</span>
++            <select id="depthSelect">
++              <option value="0">0 — только карточка</option>
++              <option value="1">1 — прямые связи</option>
++              <option value="2" selected>2 — preview связанных объектов</option>
++              <option value="3">3 — диагностика</option>
++            </select>
++          </label>
++          <label>
++            <span>Глубина файлов</span>
++            <select id="fileDepthSelect">
++              <option value="1">1</option>
++              <option value="2">2</option>
++              <option value="3">3</option>
++              <option value="4" selected>4</option>
++              <option value="5">5</option>
++            </select>
++          </label>
++          <label>
++            <span>Размер страницы</span>
++            <select id="pageSizeSelect">
++              <option value="25">25</option>
++              <option value="50" selected>50</option>
++              <option value="100">100</option>
++            </select>
++          </label>
++        </div>
++      </section>
++
++      <section class="content-grid">
++        <section class="result-pane panel">
++          <div class="panel-header">
++            <div>
++              <h2>Результаты</h2>
++              <span id="resultMeta" class="panel-meta">Нет данных</span>
++            </div>
++          </div>
++          <div id="searchResults" class="results-list empty-state">
++            Введите шифр или наименование и нажмите «Найти».
++          </div>
++        </section>
++
++        <section class="details-pane panel">
++          <div id="detailsRoot" class="details-empty">
++            <div class="empty-card">
++              <div class="empty-icon">▣</div>
++              <h2>Карточка не выбрана</h2>
++              <p>Выберите строку в результатах. Здесь появятся параметры, связи и файловые категории.</p>
++            </div>
++          </div>
++        </section>
++      </section>
++    </main>
++  </div>
++
++  <template id="sourceTemplate">
++    <label class="source-item">
++      <input type="checkbox" />
++      <span class="source-dot"></span>
++      <span class="source-text"></span>
++      <span class="source-health"></span>
++    </label>
++  </template>
++
++  <script src="./app.js" defer></script>
++</body>
++</html>
+diff -ruN dr_stage3_orig/DocsReporter-master/wwwroot/reporter/styles.css dr_stage3/DocsReporter-master/wwwroot/reporter/styles.css
+--- dr_stage3_orig/DocsReporter-master/wwwroot/reporter/styles.css	1970-01-01 00:00:00.000000000 +0000
++++ dr_stage3/DocsReporter-master/wwwroot/reporter/styles.css	2026-06-14 16:16:11.904413763 +0000
+@@ -0,0 +1,817 @@
++:root {
++  color-scheme: dark;
++  --bg: #202224;
++  --bg-deep: #17191b;
++  --panel: #2b2e31;
++  --panel-soft: #34383c;
++  --panel-strong: #24272a;
++  --line: #4a4f55;
++  --line-soft: #3b4045;
++  --text: #e8e8e8;
++  --muted: #aab0b5;
++  --muted-2: #7f878f;
++  --accent: #ef8b22;
++  --accent-2: #ffb04a;
++  --green: #8ac253;
++  --green-2: #b5df78;
++  --blue: #63bad8;
++  --yellow: #ffe100;
++  --danger: #ff6a5c;
++  --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
++  --radius: 14px;
++  --font: "Segoe UI", Roboto, Arial, sans-serif;
++}
++
++* { box-sizing: border-box; }
++
++html, body {
++  height: 100%;
++  margin: 0;
++}
++
++body {
++  font-family: var(--font);
++  background:
++    radial-gradient(circle at 20% 0%, rgba(239, 139, 34, 0.10), transparent 32%),
++    linear-gradient(180deg, #25282b 0%, var(--bg) 42%, var(--bg-deep) 100%);
++  color: var(--text);
++  overflow: hidden;
++}
++
++body.high-contrast {
++  --panel: #242628;
++  --panel-soft: #2f3337;
++  --line: #5f6870;
++  --accent: #ff9a2a;
++  --green: #9cdc65;
++  --blue: #77d4ff;
++}
++
++button, input, select, a {
++  font: inherit;
++}
++
++button {
++  cursor: pointer;
++}
++
++button:disabled {
++  opacity: .48;
++  cursor: not-allowed;
++}
++
++.app-shell {
++  display: grid;
++  grid-template-columns: 296px 1fr;
++  height: 100vh;
++  min-width: 1100px;
++}
++
++.left-rail {
++  background: linear-gradient(180deg, #2b2d2f, #232527);
++  border-right: 1px solid var(--line);
++  box-shadow: var(--shadow);
++  padding: 18px 14px;
++  overflow-y: auto;
++}
++
++.brand {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 6px 6px 18px;
++  border-bottom: 1px solid var(--line-soft);
++}
++
++.brand-mark {
++  width: 42px;
++  height: 42px;
++  display: grid;
++  place-items: center;
++  border-radius: 12px;
++  background: linear-gradient(135deg, #e78a24, #6e8795);
++  color: #101010;
++  font-weight: 800;
++  letter-spacing: .5px;
++  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
++}
++
++.brand-title {
++  font-size: 18px;
++  font-weight: 700;
++}
++
++.brand-subtitle {
++  color: var(--muted);
++  font-size: 12px;
++  margin-top: 2px;
++}
++
++.rail-section {
++  padding: 16px 4px 2px;
++}
++
++.section-title {
++  color: var(--muted);
++  font-size: 12px;
++  letter-spacing: .08em;
++  text-transform: uppercase;
++  margin: 0 4px 9px;
++}
++
++.source-list {
++  display: grid;
++  gap: 7px;
++}
++
++.source-item {
++  display: grid;
++  grid-template-columns: 18px 10px 1fr auto;
++  align-items: center;
++  gap: 8px;
++  padding: 8px 10px;
++  border: 1px solid var(--line-soft);
++  border-radius: 10px;
++  background: #2d3033;
++  user-select: none;
++}
++
++.source-item:hover,
++.source-item.active {
++  border-color: rgba(239, 139, 34, .7);
++  background: #35383a;
++}
++
++.source-item input { accent-color: var(--accent); }
++
++.source-dot {
++  width: 9px;
++  height: 9px;
++  border-radius: 999px;
++  background: var(--green);
++  box-shadow: 0 0 0 3px rgba(138, 194, 83, .13);
++}
++
++.source-text {
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.source-health {
++  color: var(--muted-2);
++  font-size: 11px;
++}
++
++.source-health.ok { color: var(--green-2); }
++.source-health.fail { color: var(--danger); }
++
++.source-tools,
++.inline-control,
++.topbar-actions,
++.search-row,
++.search-options {
++  display: flex;
++  gap: 8px;
++  align-items: center;
++}
++
++.source-tools {
++  margin-top: 10px;
++}
++
++.field-label {
++  display: block;
++  color: var(--muted);
++  font-size: 12px;
++  margin: 12px 0 6px;
++}
++
++.field-label.compact { margin-left: 4px; }
++
++.inline-control input,
++.search-box input,
++select {
++  color: var(--text);
++  background: #1f2224;
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  outline: none;
++}
++
++.inline-control input {
++  width: 100%;
++  min-width: 0;
++  padding: 8px 10px;
++}
++
++.square-btn,
++.ghost-btn,
++.primary-btn,
++.swagger-link {
++  border: 1px solid var(--line);
++  border-radius: 10px;
++  background: #2e3235;
++  color: var(--text);
++  text-decoration: none;
++  padding: 8px 12px;
++  transition: .12s ease;
++}
++
++.square-btn {
++  width: 38px;
++  height: 36px;
++  padding: 0;
++}
++
++.ghost-btn:hover,
++.square-btn:hover,
++.swagger-link:hover {
++  border-color: var(--accent);
++  color: #fff;
++}
++
++.primary-btn {
++  background: linear-gradient(180deg, var(--accent-2), var(--accent));
++  border-color: #c46f16;
++  color: #1a1207;
++  font-weight: 700;
++  min-width: 112px;
++}
++
++.primary-btn:hover {
++  filter: brightness(1.06);
++}
++
++.dictionary-list {
++  display: grid;
++  gap: 8px;
++}
++
++.dictionary-item {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  width: 100%;
++  padding: 10px;
++  color: var(--text);
++  text-align: left;
++  border: 1px solid var(--line-soft);
++  border-radius: 10px;
++  background: #2d3033;
++}
++
++.dictionary-item.active {
++  border-color: var(--accent);
++  background: linear-gradient(90deg, rgba(239, 139, 34, .24), #2d3033);
++}
++
++.dict-icon {
++  width: 18px;
++  height: 18px;
++  border-radius: 5px;
++  display: inline-block;
++  background: var(--blue);
++}
++
++.dict-icon.project { background: var(--accent); }
++.dict-icon.nomenclature { background: var(--green); }
++.dict-icon.files { background: #79a8ff; }
++.dict-icon.docs { background: #cfbd7a; }
++
++.status-log {
++  color: var(--muted);
++  font-size: 12px;
++  line-height: 1.45;
++  padding: 10px;
++  background: #202326;
++  border: 1px solid var(--line-soft);
++  border-radius: 10px;
++  min-height: 58px;
++  white-space: pre-wrap;
++}
++
++.workspace {
++  min-width: 0;
++  height: 100vh;
++  overflow: hidden;
++  display: grid;
++  grid-template-rows: auto auto 1fr;
++}
++
++.topbar {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  padding: 18px 22px 12px;
++  border-bottom: 1px solid var(--line-soft);
++  background: rgba(32, 34, 36, .72);
++  backdrop-filter: blur(10px);
++}
++
++.breadcrumb {
++  display: block;
++  color: var(--muted);
++  font-size: 12px;
++  margin-bottom: 4px;
++}
++
++h1, h2, h3 {
++  margin: 0;
++}
++
++h1 {
++  font-size: 22px;
++  font-weight: 750;
++}
++
++.search-panel {
++  padding: 14px 22px;
++  border-bottom: 1px solid var(--line-soft);
++  background: rgba(23, 25, 27, .22);
++}
++
++.search-row {
++  align-items: stretch;
++}
++
++.search-box {
++  flex: 1;
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  background: #1f2224;
++  border: 1px solid var(--line);
++  border-radius: 12px;
++  padding: 0 12px;
++}
++
++.search-box:focus-within {
++  border-color: var(--accent);
++  box-shadow: 0 0 0 3px rgba(239, 139, 34, .14);
++}
++
++.search-icon {
++  color: var(--accent-2);
++  font-size: 20px;
++}
++
++.search-box input {
++  width: 100%;
++  border: 0;
++  background: transparent;
++  padding: 11px 0;
++  font-size: 15px;
++}
++
++.search-options {
++  margin-top: 10px;
++  color: var(--muted);
++  font-size: 12px;
++  flex-wrap: wrap;
++}
++
++.search-options label {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++}
++
++select {
++  padding: 6px 28px 6px 9px;
++}
++
++.content-grid {
++  height: 100%;
++  min-height: 0;
++  display: grid;
++  grid-template-columns: minmax(380px, 44%) 1fr;
++  gap: 14px;
++  padding: 14px 22px 22px;
++}
++
++.panel {
++  min-width: 0;
++  min-height: 0;
++  border: 1px solid var(--line-soft);
++  border-radius: var(--radius);
++  background: linear-gradient(180deg, var(--panel), #25282b);
++  box-shadow: var(--shadow);
++  overflow: hidden;
++}
++
++.panel-header {
++  height: 58px;
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++  padding: 12px 14px;
++  border-bottom: 1px solid var(--line-soft);
++  background: var(--panel-strong);
++}
++
++.panel-header h2 {
++  font-size: 15px;
++}
++
++.panel-meta {
++  color: var(--muted);
++  font-size: 12px;
++}
++
++.results-list,
++.details-pane {
++  overflow: auto;
++}
++
++.results-list {
++  height: calc(100% - 58px);
++  padding: 10px;
++}
++
++.empty-state,
++.details-empty {
++  color: var(--muted);
++}
++
++.result-group-title {
++  color: var(--muted);
++  font-size: 12px;
++  margin: 12px 4px 7px;
++  display: flex;
++  justify-content: space-between;
++}
++
++.result-card {
++  display: grid;
++  grid-template-columns: 1fr auto;
++  gap: 8px;
++  padding: 10px 11px;
++  border: 1px solid var(--line-soft);
++  border-radius: 12px;
++  background: #2e3235;
++  margin-bottom: 8px;
++}
++
++.result-card:hover,
++.result-card.active {
++  border-color: var(--accent);
++  background: linear-gradient(90deg, rgba(239, 139, 34, .18), #303437);
++}
++
++.result-main {
++  min-width: 0;
++}
++
++.result-code {
++  color: var(--accent-2);
++  font-weight: 700;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.result-name {
++  margin-top: 3px;
++  color: var(--text);
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.result-sub {
++  margin-top: 4px;
++  color: var(--muted-2);
++  font-size: 12px;
++}
++
++.badge {
++  display: inline-flex;
++  align-items: center;
++  height: 23px;
++  padding: 0 8px;
++  border-radius: 999px;
++  color: #151515;
++  background: var(--green);
++  font-weight: 700;
++  font-size: 11px;
++  white-space: nowrap;
++}
++
++.details-pane {
++  position: relative;
++}
++
++.details-empty {
++  min-height: 100%;
++  display: grid;
++  place-items: center;
++  padding: 20px;
++}
++
++.empty-card {
++  max-width: 440px;
++  text-align: center;
++  color: var(--muted);
++}
++
++.empty-icon {
++  font-size: 42px;
++  color: var(--accent);
++  margin-bottom: 10px;
++}
++
++.details-root {
++  min-height: 100%;
++  display: grid;
++  grid-template-rows: auto auto 1fr;
++}
++
++.card-hero {
++  padding: 12px 14px 14px;
++  background: #24272a;
++  border-bottom: 1px solid var(--line-soft);
++}
++
++.card-yellow-strip {
++  background: var(--yellow);
++  color: #1b1b1b;
++  border-radius: 4px;
++  padding: 9px 12px;
++  font-weight: 800;
++  letter-spacing: .04em;
++  text-align: center;
++  box-shadow: inset 0 0 0 1px rgba(0,0,0,.28);
++}
++
++.card-hero-meta {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 10px;
++  margin-top: 10px;
++  color: var(--muted);
++  font-size: 12px;
++}
++
++.docs-link {
++  color: var(--blue);
++  text-decoration: none;
++}
++.docs-link:hover { text-decoration: underline; }
++
++.tabbar {
++  display: flex;
++  gap: 2px;
++  padding: 0 12px;
++  background: #24272a;
++  border-bottom: 1px solid var(--line-soft);
++}
++
++.tab-button {
++  border: 0;
++  border-top: 3px solid transparent;
++  background: transparent;
++  color: var(--muted);
++  padding: 11px 12px 10px;
++}
++
++.tab-button.active {
++  color: var(--text);
++  border-top-color: var(--accent);
++  background: #2c3033;
++}
++
++.tab-content {
++  min-height: 0;
++  overflow: auto;
++  padding: 14px;
++}
++
++.info-grid {
++  display: grid;
++  grid-template-columns: repeat(4, minmax(120px, 1fr));
++  gap: 7px;
++  margin-bottom: 12px;
++}
++
++.info-cell {
++  border: 1px solid var(--line-soft);
++  background: #2d3033;
++  border-radius: 8px;
++  overflow: hidden;
++}
++
++.info-label {
++  padding: 6px 8px;
++  color: #14210b;
++  background: var(--green);
++  font-size: 12px;
++  font-weight: 700;
++}
++
++.info-label.blue { background: var(--blue); }
++.info-label.orange { background: #d9a46f; }
++.info-label.red { background: #f27a43; }
++.info-label.gray { background: #e4dfd4; color: #222; }
++
++.info-value {
++  padding: 8px;
++  min-height: 35px;
++  color: var(--text);
++  overflow-wrap: anywhere;
++}
++
++.card-comment {
++  border: 1px solid var(--line-soft);
++  border-radius: 8px;
++  overflow: hidden;
++  margin-top: 8px;
++}
++
++.card-comment-title {
++  background: #d6b7d9;
++  color: #341e36;
++  text-align: center;
++  font-weight: 700;
++  padding: 6px;
++}
++
++.card-comment-body {
++  min-height: 48px;
++  background: #2a2d30;
++  padding: 10px;
++  color: var(--muted);
++}
++
++.summary-strip {
++  display: grid;
++  grid-template-columns: repeat(4, 1fr);
++  gap: 8px;
++  margin: 12px 0;
++}
++
++.metric {
++  border: 1px solid var(--line-soft);
++  border-radius: 10px;
++  background: #2e3235;
++  padding: 10px;
++}
++
++.metric-value {
++  color: var(--accent-2);
++  font-size: 22px;
++  font-weight: 800;
++}
++
++.metric-label {
++  color: var(--muted);
++  font-size: 12px;
++  margin-top: 2px;
++}
++
++.category-card,
++.relation-group,
++.tech-box {
++  border: 1px solid var(--line-soft);
++  border-radius: 12px;
++  background: #2b2f32;
++  margin-bottom: 10px;
++  overflow: hidden;
++}
++
++.category-head,
++.relation-head {
++  display: flex;
++  justify-content: space-between;
++  gap: 12px;
++  padding: 10px 12px;
++  background: #25282b;
++  border-bottom: 1px solid var(--line-soft);
++}
++
++.category-title,
++.relation-title {
++  font-weight: 700;
++}
++
++.category-meta,
++.relation-meta {
++  color: var(--muted);
++  font-size: 12px;
++}
++
++.tree {
++  padding: 8px 10px 10px;
++}
++
++.tree-node {
++  margin: 3px 0;
++}
++
++.node-line {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++  padding: 5px 6px;
++  border-radius: 7px;
++}
++
++.node-line:hover {
++  background: #34383c;
++}
++
++.node-name {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.node-meta {
++  margin-left: auto;
++  color: var(--muted-2);
++  font-size: 11px;
++  white-space: nowrap;
++}
++
++.node-children {
++  margin-left: 18px;
++  padding-left: 12px;
++  border-left: 1px dashed var(--line);
++}
++
++.file-link {
++  color: var(--text);
++  text-decoration: none;
++}
++.file-link:hover { color: var(--accent-2); }
++
++.table-like {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 13px;
++}
++
++.table-like th,
++.table-like td {
++  border-bottom: 1px solid var(--line-soft);
++  padding: 8px;
++  text-align: left;
++  vertical-align: top;
++}
++
++.table-like th {
++  color: var(--muted);
++  font-weight: 600;
++  background: #25282b;
++  position: sticky;
++  top: 0;
++}
++
++.table-like td {
++  color: var(--text);
++}
++
++.raw-json {
++  margin: 0;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
++  font-family: Consolas, "Liberation Mono", monospace;
++  color: #d3e6f1;
++  font-size: 12px;
++  line-height: 1.45;
++  padding: 12px;
++}
++
++.notice {
++  padding: 10px 12px;
++  border: 1px dashed var(--line);
++  border-radius: 10px;
++  color: var(--muted);
++  background: rgba(255,255,255,.03);
++}
++
++.loader {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  color: var(--muted);
++}
++.loader::before {
++  content: "";
++  width: 12px;
++  height: 12px;
++  border: 2px solid var(--line);
++  border-top-color: var(--accent);
++  border-radius: 999px;
++  animation: spin 1s linear infinite;
++}
++
++@keyframes spin { to { transform: rotate(360deg); } }
++
++@media (max-width: 1280px) {
++  .app-shell { grid-template-columns: 260px 1fr; }
++  .content-grid { grid-template-columns: 40% 1fr; }
++  .info-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
++}

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs Reporter</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="left-rail">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">Просмотрщик</div>
+          <div class="brand-subtitle"></div>
+        </div>
+      </div>
+
+      <section class="rail-section">
+        <div class="section-title">Серверы</div>
+        <div id="sourceList" class="source-list"></div>
+        <div class="source-tools">
+          <button id="reloadSourcesBtn" class="ghost-btn" type="button">Обновить</button>
+          <button id="selectAllSourcesBtn" class="ghost-btn" type="button">Все</button>
+        </div>
+        <label class="field-label compact" for="manualSourceInput">Выбор сервера</label>
+        <div class="inline-control">
+          <input id="manualSourceInput" type="text" placeholder="tdocs" />
+          <button id="addManualSourceBtn" type="button" class="square-btn">+</button>
+        </div>
+      </section>
+
+      <section class="rail-section">
+        <div class="section-title">Справочники</div>
+        <nav class="dictionary-list" aria-label="Справочники">
+          <button class="dictionary-item active" type="button" data-dictionary="Kartochka_proekta">
+            <span class="dict-icon project"></span>
+            <span>Карточки проектов</span>
+          </button>
+          <button class="dictionary-item" type="button" data-dictionary="Nomenclature" disabled>
+            <span class="dict-icon nomenclature"></span>
+            <span>ЭСИ / Nomenclature</span>
+          </button>
+          <button class="dictionary-item" type="button" data-dictionary="Files" disabled>
+            <span class="dict-icon files"></span>
+            <span>Файлы</span>
+          </button>
+          <button class="dictionary-item" type="button" data-dictionary="Documents" disabled>
+            <span class="dict-icon docs"></span>
+            <span>Документы</span>
+          </button>
+        </nav>
+      </section>
+
+      <section class="rail-section diagnostics" id="diagnosticsPanel">
+        <div class="section-title">Состояние</div>
+        <div id="statusLog" class="status-log">Готов к поиску.</div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="breadcrumb">Справочники / Карточки проектов</span>
+          <h1>Поиск карточек проекта</h1>
+        </div>
+        <div class="topbar-actions">
+          <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger дока</a>
+        </div>
+      </header>
+
+      <section class="search-panel">
+        <div class="search-row">
+          <label class="search-box" for="searchInput">
+            <span class="search-icon">⌕</span>
+            <input id="searchInput" type="search" placeholder="КТ.2110054.03 или часть наименования" autocomplete="off" />
+          </label>
+          <button id="searchBtn" class="primary-btn" type="button">Найти</button>
+        </div>
+        <div class="search-options">
+          <label >
+            <span>Глубина связей</span>
+            <select id="depthSelect" disabled>
+              <option value="0">0 — только карточка</option>
+              <option value="1" selected>1 — прямые связи</option>
+              <option value="2">2 — preview связанных объектов</option>
+              <option value="3">3 — диагностика</option>
+            </select>
+          </label>
+          <label>
+            <span>Глубина файлов</span>
+            <select id="fileDepthSelect" disabled>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" >4</option>
+              <option value="5" selected>5</option>
+            </select>
+          </label>
+          <label>
+            <span>Размер страницы</span>
+            <select id="pageSizeSelect">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <section class="result-pane panel">
+          <div class="panel-header">
+            <div>
+              <h2>Результаты</h2>
+              <span id="resultMeta" class="panel-meta">Нет данных</span>
+            </div>
+          </div>
+          <div id="searchResults" class="results-list empty-state">
+            Введите шифр или наименование и нажмите «Найти».
+          </div>
+        </section>
+
+        <section class="details-pane panel">
+          <div id="detailsRoot" class="details-empty">
+            <div class="empty-card">
+              <div class="empty-icon">▣</div>
+              <h2>Карточка не выбрана</h2>
+              <!--<p>Выберите строку в результатах. Здесь появятся параметры, связи и файловые категории.</p>-->
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <template id="sourceTemplate">
+    <label class="source-item">
+      <input type="checkbox" />
+      <span class="source-dot"></span>
+      <span class="source-text"></span>
+      <span class="source-health"></span>
+    </label>
+  </template>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

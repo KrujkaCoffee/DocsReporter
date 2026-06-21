@@ -79,10 +79,19 @@ public sealed record FileCategoryDto(
     IReadOnlyList<FileTreeNodeDto> Roots,
     IReadOnlyList<FileTreeNodeDto> FlatFiles);
 
+
+public sealed record ProjectCardPropertyDto(
+    string Code,
+    string Label,
+    string? Value,
+    string Group,
+    int SortOrder);
+
 public sealed record ProjectCardFullDto(
     string SourceCode,
     int GroupId,
     ObjectPreviewDto Card,
+    IReadOnlyList<ProjectCardPropertyDto> Properties,
     IReadOnlyList<RelationItemDto> Relations,
     IReadOnlyList<FileCategoryDto> FileCategories,
     int RequestedDepth,
