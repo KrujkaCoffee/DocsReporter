@@ -26,6 +26,8 @@ builder.Services.AddScoped<ITflexDiscoveryService, TflexDiscoveryService>();
 builder.Services.AddScoped<IProjectCardExplorerService, ProjectCardExplorerService>();
 builder.Services.AddScoped<IProjectCardFileExplorerService, ProjectCardFileExplorerService>();
 builder.Services.AddScoped<IFederatedProjectCardSearchService, FederatedProjectCardSearchService>();
+builder.Services.AddScoped<IReporterIdentityService, ReporterIdentityService>();
+builder.Services.AddScoped<ITflexAccessPreviewService, TflexAccessPreviewService>();
 
 builder.Services.AddDbContext<AppDbContext1>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-docs-pkb")));
@@ -73,5 +75,6 @@ app.MapControllers();
 
 app.MapGet("/", () => Results.Redirect("/reporter/index.html"));
 app.MapGet("/reporter", () => Results.Redirect("/reporter/index.html"));
+app.MapGet("/reporter/security", () => Results.Redirect("/reporter/security.html"));
 
 app.Run();

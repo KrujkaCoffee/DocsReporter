@@ -138,3 +138,90 @@ public sealed record FederatedProjectCardSearchDto(
     long ElapsedMilliseconds,
     IReadOnlyList<FederatedSourceSearchResultDto> SourceResults,
     IReadOnlyList<FederatedProjectCardGroupDto> Groups);
+
+public sealed record ReporterCurrentUserDto(
+    string Login,
+    string? Sid,
+    bool IsAuthenticated,
+    string? AuthenticationType,
+    bool IsDebugIdentity,
+    int AppUserId,
+    IReadOnlyList<string> AppRoles,
+    string SecurityMode,
+    IReadOnlyList<ReporterSourceIdentityDto> Sources);
+
+public sealed record ReporterSourceIdentityDto(
+    string SourceCode,
+    string DisplayName,
+    string Status,
+    string? MatchMethod,
+    long? DocsUserObjectId,
+    string? DocsUserGuid,
+    string? DocsLogin,
+    string? DocsFullName,
+    string? DocsEmail,
+    IReadOnlyList<TflexUserHierarchyNodeDto> Hierarchy,
+    string? Error);
+
+public sealed record TflexUserHierarchyNodeDto(
+    long ObjectId,
+    long? ChildObjectId,
+    int Depth,
+    bool IsSelf,
+    bool IsFirstUse,
+    string? Guid,
+    string? FullName,
+    string? Login);
+
+public sealed record ReporterReferenceDto(
+    int ReferenceId,
+    string? TableName,
+    string? Caption);
+
+public sealed record ReporterAppPolicyPreviewDto(
+    bool IsConfigured,
+    bool CanSeeInMenu,
+    bool CanSearch,
+    bool CanOpenCard,
+    bool CanExport,
+    int MaxObjectDepth,
+    int MaxFileTreeDepth,
+    int MaxRowsPerPage,
+    int MaxRelatedObjects,
+    int AllowedRelationCount);
+
+public sealed record AccessGroupCommandDto(
+    int CommandId,
+    bool Enabled);
+
+public sealed record TflexAccessRightRowDto(
+    int AccessTypeId,
+    int AccessGroupId,
+    string? AccessGroupName,
+    int? AccessGroupTypeId,
+    long UserId,
+    bool AppliesToCurrentPrincipal,
+    int ReferenceId,
+    long ObjectId,
+    int StageId,
+    int LinkTypeId,
+    long LinkId,
+    int AccessDirection,
+    int XAuthorId,
+    int XReferenceId,
+    long XObjectId,
+    long XAccessObjectId,
+    int XReferenceAuthorGroupId,
+    string Scope,
+    IReadOnlyList<AccessGroupCommandDto> Commands);
+
+public sealed record TflexAccessPreviewDto(
+    string SourceCode,
+    ReporterSourceIdentityDto Identity,
+    ReporterReferenceDto Reference,
+    ReporterAppPolicyPreviewDto AppPolicy,
+    IReadOnlyList<long> PrincipalObjectIds,
+    int TotalRows,
+    int ApplicableRows,
+    IReadOnlyList<TflexAccessRightRowDto> Rows,
+    IReadOnlyList<string> Warnings);

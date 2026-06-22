@@ -29,11 +29,9 @@ public sealed class ReporterAccessService : IReporterAccessService
 
     public async Task<int> EnsureAppUserAsync(ClaimsPrincipal user, CancellationToken ct)
     {
-        var login = user.Identity?.Name;
-        if (string.IsNullOrWhiteSpace(login))
-            login = "anonymous";
-
-        var sid = user.FindFirst(ClaimTypes.PrimarySid)?.Value;
+        var principal = ReporterPrincipalResolver.Resolve(user, _options);
+        var login = principal.Login;
+        var sid = principal.Sid;
 
         await using var cn = await _factory.OpenAppConnectionAsync(ct);
         await using var cmd = cn.CreateCommand();

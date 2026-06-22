@@ -10,3 +10,15 @@ GET {{DocsApi_HostAddress}}/api/reporter/project-cards/search?query=%D0%9A%D0%A2
 Accept: application/json
 
 ###
+
+### Stage 5A: current reporter/T-FLEX identity
+GET {{DocsApi_HostAddress}}/api/reporter/security/me?sources=tdocs,docs,pow
+Accept: application/json
+
+###
+
+### Stage 5A: T-FLEX access preview for Kartochka_proekta
+GET {{DocsApi_HostAddress}}/api/reporter/security/sources/tdocs/references/891/preview
+Accept: application/json
+
+###

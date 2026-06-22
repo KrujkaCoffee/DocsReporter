@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs Reporter — доступ</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="security-page">
+  <main class="security-shell">
+    <header class="security-header">
+      <div>
+        <span class="breadcrumb">Docs Reporter / Диагностика доступа</span>
+        <h1>Пользователь и права T-FLEX</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="swagger-link" href="./index.html">← К просмотру</a>
+        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
+      </div>
+    </header>
+
+    <section class="security-notice">
+      <strong>Preview-режим.</strong>
+      Страница сопоставляет Windows-пользователя с Users/UserParameters,
+      раскрывает UsersHierarchy и показывает исходные строки xAccessRights.
+      Выдача карточек пока не фильтруется этими строками.
+    </section>
+
+    <section class="security-controls panel">
+      <label>
+        <span>Источник</span>
+        <select id="securitySource"></select>
+      </label>
+
+      <label>
+        <span>Reference ID / ParameterGroups.PK</span>
+        <input
+          id="securityReferenceId"
+          type="number"
+          min="1"
+          value="891" />
+      </label>
+
+      <label>
+        <span>Object ID, необязательно</span>
+        <input
+          id="securityObjectId"
+          type="number"
+          min="1"
+          placeholder="s_ObjectID" />
+      </label>
+
+      <button
+        id="securityRefresh"
+        class="primary-btn"
+        type="button">
+        Проверить
+      </button>
+    </section>
+
+    <section
+      id="securityStatus"
+      class="status-log security-status">
+      Загрузка пользователя…
+    </section>
+
+    <section class="security-grid">
+      <article class="panel security-card">
+        <div class="panel-header">
+          <div>
+            <h2>Web / Windows identity</h2>
+            <span class="panel-meta">app.AppUser и роли</span>
+          </div>
+        </div>
+        <div
+          id="securityPrincipal"
+          class="security-card-body"></div>
+      </article>
+
+      <article class="panel security-card">
+        <div class="panel-header">
+          <div>
+            <h2>T-FLEX identity</h2>
+            <span class="panel-meta">Users + UserParameters</span>
+          </div>
+        </div>
+        <div
+          id="securityDocsIdentity"
+          class="security-card-body"></div>
+      </article>
+
+      <article class="panel security-card security-wide">
+        <div class="panel-header">
+          <div>
+            <h2>Иерархия пользователя</h2>
+            <span class="panel-meta">
+              UsersHierarchy: пользователь → группы → родительские группы
+            </span>
+          </div>
+        </div>
+        <div
+          id="securityHierarchy"
+          class="security-table-wrap"></div>
+      </article>
+
+      <article class="panel security-card">
+        <div class="panel-header">
+          <div>
+            <h2>Политика репортера</h2>
+            <span class="panel-meta">app.GroupAccessPolicy</span>
+          </div>
+        </div>
+        <div
+          id="securityPolicy"
+          class="security-card-body"></div>
+      </article>
+
+      <article class="panel security-card">
+        <div class="panel-header">
+          <div>
+            <h2>Справочник</h2>
+            <span class="panel-meta">ParameterGroups.PK</span>
+          </div>
+        </div>
+        <div
+          id="securityReference"
+          class="security-card-body"></div>
+      </article>
+
+      <article class="panel security-card security-wide">
+        <div class="panel-header">
+          <div>
+            <h2>xAccessRights</h2>
+            <span
+              id="securityRightsMeta"
+              class="panel-meta">
+              Нет данных
+            </span>
+          </div>
+        </div>
+
+        <div id="securityWarnings"></div>
+        <div
+          id="securityRights"
+          class="security-table-wrap"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="./security.js" defer></script>
+</body>
+</html>

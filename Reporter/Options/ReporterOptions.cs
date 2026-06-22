@@ -11,4 +11,11 @@ public sealed class ReporterOptions
     public int FederatedMaxConcurrency { get; set; } = 4;
     public int FederatedSourceTimeoutSeconds { get; set; } = 15;
     public int FederatedMaxPageSize { get; set; } = 100;
+
+    // Stage 5A: identity/access preview. Preview does not enforce T-FLEX ACL yet.
+    public string SecurityMode { get; set; } = "Preview";
+    public string? DebugWindowsLogin { get; set; }
+    public string? DebugWindowsSid { get; set; }
+    public int SecurityMaxHierarchyDepth { get; set; } = 16;
+    public int SecurityMaxRightsRows { get; set; } = 500;
 }

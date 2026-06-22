@@ -1,6 +1,8 @@
 using System.Data;
 using DocsApi.Reporter.Dto;
 using DocsApi.Reporter.Infrastructure;
+using DocsApi.Reporter.Options;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +14,14 @@ namespace DocsApi.Reporter.Controllers;
 public sealed class ReporterUiController : ControllerBase
 {
     private readonly IReporterSqlConnectionFactory _factory;
+    private readonly ReporterOptions _options;
 
-    public ReporterUiController(IReporterSqlConnectionFactory factory)
+    public ReporterUiController(
+        IReporterSqlConnectionFactory factory,
+        IOptions<ReporterOptions> options)
     {
         _factory = factory;
+        _options = options.Value;
     }
 
     [HttpGet("config")]
@@ -28,8 +34,10 @@ public sealed class ReporterUiController : ControllerBase
             defaultFileDepth = 4,
             defaultPageSize = 50,
             maxPageSize = 100,
-            uiVersion = "stage-4",
-            federatedSearchUrl = "/api/reporter/project-cards/search"
+            uiVersion = "stage-5a",
+            federatedSearchUrl = "/api/reporter/project-cards/search",
+            securityMode = _options.SecurityMode,
+            securityPreviewUrl = "/api/reporter/security"
         });
     }
 
