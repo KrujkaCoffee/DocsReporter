@@ -109,3 +109,32 @@ public sealed record BootstrapResultDto(
     string SourceCode,
     int GroupPoliciesUpserted,
     int RelationPoliciesUpserted);
+
+public sealed record FederatedSourceSearchResultDto(
+    string SourceCode,
+    string DisplayName,
+    string Status,
+    long ElapsedMilliseconds,
+    int Count,
+    string? Error,
+    IReadOnlyList<ProjectCardSearchItemDto> Items);
+
+public sealed record FederatedProjectCardGroupDto(
+    string Key,
+    string? ObjectCode,
+    string? Name,
+    int SourceCount,
+    IReadOnlyList<ProjectCardSearchItemDto> Items);
+
+public sealed record FederatedProjectCardSearchDto(
+    string Query,
+    int Page,
+    int PageSize,
+    IReadOnlyList<string> RequestedSources,
+    int TotalCount,
+    int SuccessfulSourceCount,
+    int FailedSourceCount,
+    bool IsPartial,
+    long ElapsedMilliseconds,
+    IReadOnlyList<FederatedSourceSearchResultDto> SourceResults,
+    IReadOnlyList<FederatedProjectCardGroupDto> Groups);

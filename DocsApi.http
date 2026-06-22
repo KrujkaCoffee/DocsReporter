@@ -4,3 +4,9 @@ GET {{DocsApi_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Stage 4: federated project-card search
+GET {{DocsApi_HostAddress}}/api/reporter/project-cards/search?query=%D0%9A%D0%A2.2110054.03&sources=tdocs,docs,pow&page=1&pageSize=50&sourceTimeoutSeconds=15
+Accept: application/json
+
+###

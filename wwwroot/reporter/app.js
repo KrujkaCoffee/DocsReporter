@@ -15,7 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
     activeCard: null,
     activeTab: 'card',
     loading: false,
-    lastQuery: ''
+    lastQuery: '',
+    lastSearchResponses: [],
+    lastFederated: null,
+    searchAbortController: null,
+    resultView: 'source'
   };
 
   const $ = (id) => document.getElementById(id);
@@ -28,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const depthSelect = $('depthSelect');
   const fileDepthSelect = $('fileDepthSelect');
   const pageSizeSelect = $('pageSizeSelect');
+  const resultViewSelect = $('resultViewSelect');
+  const sourceSummary = $('sourceSummary');
   const manualSourceInput = $('manualSourceInput');
 
   function get(obj, ...names) {
@@ -79,7 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = await response.text();
         details = text ? `: ${text.slice(0, 300)}` : '';
       } catch { /* ignore */ }
-      throw new Error(`${response.status} ${response.statusText}${details}`);
+      const error = new Error(`${response.status} ${response.statusText}${details}`);
+      error.status = response.status;
+      throw error;
     }
 
     if (response.status === 204) return null;
@@ -97,6 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (saved.query) searchInput.value = saved.query;
       if (saved.depth) depthSelect.value = String(saved.depth);
       if (saved.fileDepth) fileDepthSelect.value = String(saved.fileDepth);
+      if (saved.pageSize) pageSizeSelect.value = String(saved.pageSize);
+      if (saved.resultView && resultViewSelect) {
+        resultViewSelect.value = saved.resultView;
+        state.resultView = saved.resultView;
+      }
     } catch { /* ignore broken local storage */ }
   }
 
@@ -105,7 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedSources: [...state.selectedSources],
       query: searchInput.value.trim(),
       depth: depthSelect.value,
-      fileDepth: fileDepthSelect.value
+      fileDepth: fileDepthSelect.value,
+      pageSize: pageSizeSelect.value,
+      resultView: resultViewSelect?.value || state.resultView || 'source'
     };
     localStorage.setItem('docsReporter.ui', JSON.stringify(payload));
   }
@@ -149,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const text = node.querySelector('.source-text');
       const health = node.querySelector('.source-health');
       checkbox.checked = state.selectedSources.has(source.code);
+      node.dataset.sourceCode = source.code;
       text.textContent = source.displayName || source.code;
       text.title = source.code;
       health.textContent = source.code;
@@ -204,85 +220,351 @@ document.addEventListener('DOMContentLoaded', () => {
     state.lastQuery = query;
     state.results = [];
     state.activeResultKey = null;
+    state.lastSearchResponses = [];
+    state.lastFederated = null;
     saveLocalState();
 
     if (!query) {
       searchResults.className = 'results-list empty-state';
       searchResults.textContent = 'Введите шифр или часть наименования.';
       resultMeta.textContent = 'Нет данных';
+      if (sourceSummary) sourceSummary.innerHTML = '';
       return;
     }
 
+    if (state.searchAbortController) state.searchAbortController.abort();
+    const controller = new AbortController();
+    state.searchAbortController = controller;
+
     setBusy(true);
     searchResults.className = 'results-list';
-    searchResults.innerHTML = '<div class="notice"><span class="loader">Поиск по выбранным источникам</span></div>';
+    searchResults.innerHTML = '<div class="notice"><span class="loader">Единый поиск по выбранным источникам</span></div>';
     resultMeta.textContent = selectedSources.join(', ');
+    if (sourceSummary) sourceSummary.innerHTML = '';
 
-    const tasks = selectedSources.map(async (sourceCode) => {
-      const url = `/api/reporter/sources/${encodeURIComponent(sourceCode)}/project-cards/search?query=${encodeURIComponent(query)}&page=1&pageSize=${pageSize}`;
+    try {
+      let federated;
       try {
-        const data = await fetchJson(url);
-        return { sourceCode, ok: true, items: asArray(data).map(x => normalizeSearchItem(x, sourceCode)) };
+        federated = await searchFederated(query, selectedSources, pageSize, controller.signal);
       } catch (error) {
-        return { sourceCode, ok: false, error: error.message, items: [] };
+        if (error.name === 'AbortError') return;
+        // Backward-compatible fallback allows this UI to work while the Stage 4 backend is being deployed.
+        const legacyResponses = await searchLegacy(query, selectedSources, pageSize, controller.signal);
+        federated = buildLegacyFederated(query, selectedSources, pageSize, legacyResponses, error);
+      }
+
+      if (controller.signal.aborted) return;
+
+      state.lastFederated = federated;
+      state.lastSearchResponses = federated.sourceResults;
+      state.results = federated.sourceResults.flatMap(response => response.items);
+      applyComparisonMetadata(federated.groups);
+      renderSearchResults(state.lastSearchResponses);
+      renderSourceSummary(state.lastSearchResponses, federated);
+      updateSourceHealthFromSearch(state.lastSearchResponses);
+
+      const failed = federated.sourceResults.filter(response => !response.ok);
+      if (failed.length) {
+        setStatus(`Поиск завершен частично: ${federated.successfulSourceCount}/${federated.sourceResults.length} источников, ${federated.totalCount} записей`, 'error');
+      } else {
+        setStatus(`Найдено ${federated.totalCount} записей на ${federated.successfulSourceCount} источниках за ${formatDuration(federated.elapsedMilliseconds)}`, 'ok');
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      searchResults.className = 'results-list empty-state';
+      searchResults.textContent = `Не удалось выполнить поиск: ${error.message}`;
+      resultMeta.textContent = 'Ошибка';
+      setStatus(error.message, 'error');
+    } finally {
+      if (state.searchAbortController === controller) {
+        state.searchAbortController = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  async function searchFederated(query, selectedSources, pageSize, signal) {
+    const params = new URLSearchParams({
+      query,
+      sources: selectedSources.join(','),
+      page: '1',
+      pageSize: String(pageSize)
+    });
+    const raw = await fetchJson(`/api/reporter/project-cards/search?${params.toString()}`, { signal });
+    return normalizeFederated(raw, query, selectedSources, pageSize);
+  }
+
+  async function searchLegacy(query, selectedSources, pageSize, signal) {
+    const tasks = selectedSources.map(async sourceCode => {
+      const url = `/api/reporter/sources/${encodeURIComponent(sourceCode)}/project-cards/search?query=${encodeURIComponent(query)}&page=1&pageSize=${pageSize}`;
+      const started = performance.now();
+      try {
+        const data = await fetchJson(url, { signal });
+        return {
+          sourceCode,
+          displayName: sourceDisplayName(sourceCode),
+          status: 'ok',
+          ok: true,
+          elapsedMilliseconds: Math.round(performance.now() - started),
+          error: null,
+          items: asArray(data).map(item => normalizeSearchItem(item, sourceCode))
+        };
+      } catch (error) {
+        if (error.name === 'AbortError') throw error;
+        return {
+          sourceCode,
+          displayName: sourceDisplayName(sourceCode),
+          status: 'error',
+          ok: false,
+          elapsedMilliseconds: Math.round(performance.now() - started),
+          error: error.message,
+          items: []
+        };
       }
     });
+    return Promise.all(tasks);
+  }
 
-    const responses = await Promise.all(tasks);
-    state.results = responses.flatMap(x => x.items);
-    renderSearchResults(responses);
-    const failed = responses.filter(x => !x.ok);
-    if (failed.length) {
-      setStatus(`Поиск завершен частично. Ошибки: ${failed.map(x => x.sourceCode).join(', ')}`, 'error');
-    } else {
-      setStatus(`Найдено: ${state.results.length}`, 'ok');
+  function buildLegacyFederated(query, selectedSources, pageSize, sourceResults, federatedError) {
+    const items = sourceResults.flatMap(response => response.items);
+    const groups = buildClientGroups(items);
+    const successfulSourceCount = sourceResults.filter(response => response.ok).length;
+    return {
+      query,
+      page: 1,
+      pageSize,
+      requestedSources: selectedSources,
+      totalCount: items.length,
+      successfulSourceCount,
+      failedSourceCount: sourceResults.length - successfulSourceCount,
+      isPartial: sourceResults.some(response => !response.ok),
+      elapsedMilliseconds: Math.max(0, ...sourceResults.map(response => response.elapsedMilliseconds || 0)),
+      sourceResults,
+      groups,
+      fallbackReason: federatedError?.message || null
+    };
+  }
+
+  function normalizeFederated(raw, query, selectedSources, pageSize) {
+    const sourceResults = asArray(get(raw, 'sourceResults', 'SourceResults')).map(normalizeSourceSearchResult);
+    const groups = asArray(get(raw, 'groups', 'Groups')).map(normalizeComparisonGroup);
+    return {
+      query: get(raw, 'query', 'Query') ?? query,
+      page: get(raw, 'page', 'Page') ?? 1,
+      pageSize: get(raw, 'pageSize', 'PageSize') ?? pageSize,
+      requestedSources: asArray(get(raw, 'requestedSources', 'RequestedSources')).length
+        ? asArray(get(raw, 'requestedSources', 'RequestedSources'))
+        : selectedSources,
+      totalCount: get(raw, 'totalCount', 'TotalCount') ?? sourceResults.reduce((sum, result) => sum + result.items.length, 0),
+      successfulSourceCount: get(raw, 'successfulSourceCount', 'SuccessfulSourceCount') ?? sourceResults.filter(result => result.ok).length,
+      failedSourceCount: get(raw, 'failedSourceCount', 'FailedSourceCount') ?? sourceResults.filter(result => !result.ok).length,
+      isPartial: get(raw, 'isPartial', 'IsPartial') ?? sourceResults.some(result => !result.ok),
+      elapsedMilliseconds: get(raw, 'elapsedMilliseconds', 'ElapsedMilliseconds') ?? 0,
+      sourceResults,
+      groups: groups.length ? groups : buildClientGroups(sourceResults.flatMap(result => result.items)),
+      fallbackReason: null
+    };
+  }
+
+  function normalizeSourceSearchResult(raw) {
+    const sourceCode = get(raw, 'sourceCode', 'SourceCode') ?? '';
+    const status = String(get(raw, 'status', 'Status') ?? 'error').toLowerCase();
+    return {
+      sourceCode,
+      displayName: get(raw, 'displayName', 'DisplayName') ?? sourceDisplayName(sourceCode),
+      status,
+      ok: status === 'ok',
+      elapsedMilliseconds: get(raw, 'elapsedMilliseconds', 'ElapsedMilliseconds') ?? 0,
+      error: get(raw, 'error', 'Error') ?? null,
+      items: asArray(get(raw, 'items', 'Items')).map(item => normalizeSearchItem(item, sourceCode))
+    };
+  }
+
+  function normalizeComparisonGroup(raw) {
+    const items = asArray(get(raw, 'items', 'Items')).map(item => normalizeSearchItem(item, get(item, 'sourceCode', 'SourceCode') ?? ''));
+    return {
+      key: get(raw, 'key', 'Key') ?? comparisonKey(items[0]),
+      objectCode: get(raw, 'objectCode', 'ObjectCode') ?? items[0]?.objectCode ?? '',
+      name: get(raw, 'name', 'Name') ?? items[0]?.name ?? '',
+      sourceCount: get(raw, 'sourceCount', 'SourceCount') ?? new Set(items.map(item => item.sourceCode)).size,
+      items
+    };
+  }
+
+  function buildClientGroups(items) {
+    const groups = new Map();
+    for (const item of items) {
+      const key = comparisonKey(item);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
     }
-    setBusy(false);
+    return [...groups.entries()].map(([key, groupItems]) => ({
+      key,
+      objectCode: groupItems[0]?.objectCode || '',
+      name: groupItems[0]?.name || '',
+      sourceCount: new Set(groupItems.map(item => item.sourceCode)).size,
+      items: groupItems
+    }));
+  }
+
+  function comparisonKey(item) {
+    if (item?.objectCode) return `code:${String(item.objectCode).replace(/\s+/g, '').toUpperCase()}`;
+    return `object:${item?.sourceCode || ''}:${item?.objectId || ''}`;
+  }
+
+  function applyComparisonMetadata(groups) {
+    const byKey = new Map(asArray(groups).map(group => [group.key, group]));
+    for (const item of state.results) {
+      const group = byKey.get(comparisonKey(item));
+      item.comparisonKey = group?.key || comparisonKey(item);
+      item.sourceCount = group?.sourceCount || 1;
+    }
+  }
+
+  function sourceDisplayName(sourceCode) {
+    return state.sources.find(source => source.code.toLowerCase() === String(sourceCode).toLowerCase())?.displayName || sourceCode;
+  }
+
+  function formatDuration(milliseconds) {
+    const ms = Number(milliseconds || 0);
+    if (ms < 1000) return `${Math.max(0, Math.round(ms))} мс`;
+    return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} с`;
+  }
+
+  function statusLabel(status) {
+    switch (String(status || '').toLowerCase()) {
+      case 'ok': return 'готов';
+      case 'timeout': return 'таймаут';
+      case 'forbidden': return 'нет доступа';
+      case 'cancelled': return 'отменен';
+      default: return 'ошибка';
+    }
+  }
+
+  function renderSourceSummary(responses, federated) {
+    if (!sourceSummary) return;
+    const chips = responses.map(response => `
+      <div class="source-summary-chip ${attr(response.status || (response.ok ? 'ok' : 'error'))}" title="${attr(response.error || '')}">
+        <span class="summary-status-dot"></span>
+        <strong>${escapeHtml(response.displayName || response.sourceCode)}</strong>
+        <span>${response.ok ? `${response.items.length} шт.` : statusLabel(response.status)}</span>
+        <span class="summary-time">${formatDuration(response.elapsedMilliseconds)}</span>
+      </div>`).join('');
+    const mode = federated?.fallbackReason
+      ? `<div class="source-summary-chip fallback" title="${attr(federated.fallbackReason)}">fallback API</div>`
+      : `<div class="source-summary-total">${escapeHtml(federated?.successfulSourceCount ?? 0)}/${escapeHtml(responses.length)} источников · ${formatDuration(federated?.elapsedMilliseconds)}</div>`;
+    sourceSummary.innerHTML = chips + mode;
+  }
+
+  function updateSourceHealthFromSearch(responses) {
+    for (const response of responses) {
+      const node = [...sourceList.querySelectorAll('[data-source-code]')]
+        .find(item => String(item.dataset.sourceCode).toLowerCase() === String(response.sourceCode).toLowerCase());
+      const health = node?.querySelector('.source-health');
+      if (!health) continue;
+      health.className = 'source-health';
+      if (response.ok) {
+        health.textContent = formatDuration(response.elapsedMilliseconds);
+        health.classList.add('ok');
+      } else {
+        health.textContent = response.status === 'timeout' ? 'тайм.' : '!';
+        health.classList.add('fail');
+      }
+    }
   }
 
   function renderSearchResults(responses) {
-    const total = responses.reduce((acc, r) => acc + r.items.length, 0);
-    resultMeta.textContent = `${total} найдено`;
+    const total = responses.reduce((acc, response) => acc + response.items.length, 0);
+    const mode = resultViewSelect?.value || state.resultView || 'source';
+    state.resultView = mode;
+    const groups = state.lastFederated?.groups || buildClientGroups(state.results);
+    resultMeta.textContent = mode === 'code'
+      ? `${total} записей · ${groups.length} шифров`
+      : `${total} найдено`;
 
-    if (!total && responses.every(r => r.ok)) {
+    if (!total && responses.every(response => response.ok)) {
       searchResults.className = 'results-list empty-state';
       searchResults.textContent = 'Ничего не найдено. Попробуйте другой шифр или включите другой source.';
       return;
     }
 
-    const html = responses.map(response => {
-      const title = `<div class="result-group-title"><span>${escapeHtml(response.sourceCode)}</span><span>${response.ok ? response.items.length + ' шт.' : 'ошибка'}</span></div>`;
-      if (!response.ok) {
-        return `${title}<div class="notice">${escapeHtml(response.error)}</div>`;
-      }
-      if (!response.items.length) {
-        return `${title}<div class="notice">Нет совпадений.</div>`;
-      }
-      return title + response.items.map(item => renderResultCard(item)).join('');
-    }).join('');
+    const html = mode === 'code'
+      ? renderComparisonResults(groups, responses)
+      : renderSourceResults(responses);
 
     searchResults.className = 'results-list';
     searchResults.innerHTML = html;
     searchResults.querySelectorAll('[data-result-key]').forEach(node => {
       node.addEventListener('click', () => {
         const key = node.getAttribute('data-result-key');
-        const item = state.results.find(x => x.key === key);
+        const item = state.results.find(result => result.key === key);
         if (item) openCard(item);
       });
     });
   }
 
-  function renderResultCard(item) {
+  function renderSourceResults(responses) {
+    return responses.map(response => {
+      const sourceTitle = response.displayName || response.sourceCode;
+      const status = response.ok
+        ? `${response.items.length} шт. · ${formatDuration(response.elapsedMilliseconds)}`
+        : `${statusLabel(response.status)} · ${formatDuration(response.elapsedMilliseconds)}`;
+      const title = `<div class="result-group-title ${response.ok ? '' : 'failed'}"><span>${escapeHtml(sourceTitle)}</span><span>${escapeHtml(status)}</span></div>`;
+      if (!response.ok) {
+        return `${title}<div class="notice source-error">${escapeHtml(response.error || 'Источник недоступен.')}</div>`;
+      }
+      if (!response.items.length) {
+        return `${title}<div class="notice">Нет совпадений.</div>`;
+      }
+      return title + response.items.map(item => renderResultCard(item)).join('');
+    }).join('');
+  }
+
+  function renderComparisonResults(groups, responses) {
+    const errors = responses
+      .filter(response => !response.ok)
+      .map(response => `<div class="notice source-error"><strong>${escapeHtml(response.displayName || response.sourceCode)}:</strong> ${escapeHtml(statusLabel(response.status))}${response.error ? ` · ${escapeHtml(response.error)}` : ''}</div>`)
+      .join('');
+
+    if (!groups.length) return errors || '<div class="notice">Нет совпадений.</div>';
+
+    const groupHtml = groups.map(group => {
+      const items = group.items
+        .map(item => state.results.find(result => result.key === item.key) || item)
+        .map(item => renderResultCard(item, true))
+        .join('');
+      const code = group.objectCode || group.items[0]?.objectCode || 'Без шифра';
+      const name = group.name || group.items[0]?.name || '';
+      return `
+        <section class="comparison-group">
+          <div class="comparison-head">
+            <div class="comparison-title-wrap">
+              <span class="comparison-code">${escapeHtml(code)}</span>
+              ${name ? `<span class="comparison-name">${escapeHtml(name)}</span>` : ''}
+            </div>
+            <span class="badge ${group.sourceCount > 1 ? 'multi' : ''}">${group.sourceCount} ${group.sourceCount === 1 ? 'сервер' : 'серв.'}</span>
+          </div>
+          <div class="comparison-items">${items}</div>
+        </section>`;
+    }).join('');
+
+    return errors + groupHtml;
+  }
+
+  function renderResultCard(item, compact = false) {
     const code = item.objectCode || `Object ${item.objectId}`;
     const name = item.name || 'Без наименования';
+    const crossSource = Number(item.sourceCount || 1) > 1
+      ? `<span class="cross-source-mark" title="Шифр найден на ${item.sourceCount} источниках">×${item.sourceCount}</span>`
+      : '';
     return `
-      <button type="button" class="result-card ${state.activeResultKey === item.key ? 'active' : ''}" data-result-key="${attr(item.key)}">
+      <button type="button" class="result-card ${compact ? 'compact' : ''} ${state.activeResultKey === item.key ? 'active' : ''}" data-result-key="${attr(item.key)}">
         <span class="result-main">
           <span class="result-code">${escapeHtml(code)}</span>
           <span class="result-name">${escapeHtml(name)}</span>
           <span class="result-sub">objectId: ${escapeHtml(item.objectId)}${item.guid ? ' · ' + escapeHtml(item.guid) : ''}</span>
         </span>
-        <span class="badge">${escapeHtml(item.sourceCode)}</span>
+        <span class="result-badges"><span class="badge">${escapeHtml(item.sourceCode)}</span>${crossSource}</span>
       </button>`;
   }
 
@@ -312,12 +594,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function groupCurrentResults() {
+    if (state.lastSearchResponses.length) return state.lastSearchResponses;
     const map = new Map();
     for (const item of state.results) {
       if (!map.has(item.sourceCode)) map.set(item.sourceCode, []);
       map.get(item.sourceCode).push(item);
     }
-    return [...map].map(([sourceCode, items]) => ({ sourceCode, ok: true, items }));
+    return [...map].map(([sourceCode, items]) => ({
+      sourceCode,
+      displayName: sourceDisplayName(sourceCode),
+      status: 'ok',
+      ok: true,
+      elapsedMilliseconds: 0,
+      error: null,
+      items
+    }));
   }
 
   function normalizePreview(preview) {
@@ -711,7 +1002,13 @@ document.addEventListener('DOMContentLoaded', () => {
     depthSelect.addEventListener('change', saveLocalState);
     fileDepthSelect.addEventListener('change', saveLocalState);
     pageSizeSelect.addEventListener('change', saveLocalState);
-    $('toggleThemeBtn').addEventListener('click', () => {
+    resultViewSelect?.addEventListener('change', () => {
+      state.resultView = resultViewSelect.value;
+      saveLocalState();
+      if (state.lastSearchResponses.length) renderSearchResults(state.lastSearchResponses);
+    });
+    const toggleThemeBtn = $('toggleThemeBtn');
+    toggleThemeBtn?.addEventListener('click', () => {
       document.body.classList.toggle('high-contrast');
       localStorage.setItem('docsReporter.highContrast', document.body.classList.contains('high-contrast') ? '1' : '0');
     });

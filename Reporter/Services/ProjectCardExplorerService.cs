@@ -45,6 +45,7 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
         //pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
         pageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (page - 1) * pageSize;
+        var baseDocsUrl = await GetBaseDocsUrlAsync(sourceCode, ct);
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
         var columns = await SqlHelpers.GetColumnsAsync(src, "dbo", "Kartochka_proekta", ct);
@@ -64,6 +65,24 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
         if (nameCol is not null) predicates.Add($"TRY_CONVERT(nvarchar(4000), {SqlHelpers.QuoteName(nameCol)}) LIKE N'%' + @query + N'%'");
         var searchPredicate = predicates.Count == 0 ? "1 = 1" : string.Join(" OR ", predicates);
 
+        var rankCases = new List<string>();
+        if (codeCol is not null)
+        {
+            var codeSql = $"TRY_CONVERT(nvarchar(4000), {SqlHelpers.QuoteName(codeCol)})";
+            rankCases.Add($"WHEN @query IS NOT NULL AND @query <> N'' AND {codeSql} = @query THEN 0");
+            rankCases.Add($"WHEN @query IS NOT NULL AND @query <> N'' AND {codeSql} LIKE @query + N'%' THEN 1");
+            rankCases.Add($"WHEN @query IS NOT NULL AND @query <> N'' AND {codeSql} LIKE N'%' + @query + N'%' THEN 2");
+        }
+        if (nameCol is not null)
+        {
+            var nameSql = $"TRY_CONVERT(nvarchar(4000), {SqlHelpers.QuoteName(nameCol)})";
+            rankCases.Add($"WHEN @query IS NOT NULL AND @query <> N'' AND {nameSql} LIKE @query + N'%' THEN 3");
+            rankCases.Add($"WHEN @query IS NOT NULL AND @query <> N'' AND {nameSql} LIKE N'%' + @query + N'%' THEN 4");
+        }
+        var orderBy = rankCases.Count == 0
+            ? "s_ObjectID DESC"
+            : $"CASE {string.Join(" ", rankCases)} ELSE 5 END, s_ObjectID DESC";
+
         await using var cmd = src.CreateCommand();
         cmd.CommandTimeout = 30;
         cmd.CommandText = $@"
@@ -76,7 +95,7 @@ FROM dbo.Kartochka_proekta
 WHERE s_ActualVersion = 1
   AND s_Deleted = 0
   AND (@query IS NULL OR @query = N'' OR ({searchPredicate}))
-ORDER BY s_ObjectID DESC
+ORDER BY {orderBy}
 OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         cmd.Parameters.Add(new SqlParameter("@query", SqlDbType.NVarChar, 4000) { Value = (object?)query ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@offset", SqlDbType.Int) { Value = offset });
@@ -94,7 +113,7 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
                 guid,
                 r.GetNullableString("ObjectCode"),
                 r.GetNullableString("Name"),
-                await BuildDocsUrlAsync(sourceCode, ProjectCardGroupId, objectId, ct)));
+                BuildDocsUrl(baseDocsUrl, ProjectCardGroupId, objectId)));
         }
         return result;
     }
@@ -374,11 +393,33 @@ WHERE s_ObjectID = @objectId
 
     private async Task<string?> BuildDocsUrlAsync(string sourceCode, int groupId, long objectId, CancellationToken ct)
     {
-        await using var app = await _factory.OpenAppConnectionAsync(ct);
-        await using var cmd = app.CreateCommand();
-        cmd.CommandText = "SELECT BaseDocsUrl FROM app.Source WHERE Code = @code";
-        cmd.Parameters.Add(new SqlParameter("@code", SqlDbType.NVarChar, 100) { Value = sourceCode });
-        var baseUrl = Convert.ToString(await cmd.ExecuteScalarAsync(ct));
+        var baseUrl = await GetBaseDocsUrlAsync(sourceCode, ct);
+        return BuildDocsUrl(baseUrl, groupId, objectId);
+    }
+
+    private async Task<string?> GetBaseDocsUrlAsync(string sourceCode, CancellationToken ct)
+    {
+        try
+        {
+            await using var app = await _factory.OpenAppConnectionAsync(ct);
+            await using var cmd = app.CreateCommand();
+            cmd.CommandText = "SELECT BaseDocsUrl FROM app.Source WHERE Code = @code";
+            cmd.Parameters.Add(new SqlParameter("@code", SqlDbType.NVarChar, 100) { Value = sourceCode });
+            return Convert.ToString(await cmd.ExecuteScalarAsync(ct));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            // A missing reporting catalog must not block a read-only source search.
+            return null;
+        }
+    }
+
+    private static string? BuildDocsUrl(string? baseUrl, int groupId, long objectId)
+    {
         if (string.IsNullOrWhiteSpace(baseUrl)) return null;
         return baseUrl.TrimEnd('/') + $"/OpenPropertiesInNewWindow/?refId={groupId}&objId={objectId}";
     }

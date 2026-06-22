@@ -106,16 +106,24 @@
               <option value="100">100</option>
             </select>
           </label>
+          <label>
+            <span>Группировка</span>
+            <select id="resultViewSelect">
+              <option value="source" selected>По серверам</option>
+              <option value="code">По шифру</option>
+            </select>
+          </label>
         </div>
       </section>
 
       <section class="content-grid">
         <section class="result-pane panel">
-          <div class="panel-header">
+          <div class="panel-header result-panel-header">
             <div>
               <h2>Результаты</h2>
               <span id="resultMeta" class="panel-meta">Нет данных</span>
             </div>
+            <div id="sourceSummary" class="source-summary" aria-live="polite"></div>
           </div>
           <div id="searchResults" class="results-list empty-state">
             Введите шифр или наименование и нажмите «Найти».
