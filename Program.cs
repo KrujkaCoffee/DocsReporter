@@ -28,6 +28,7 @@ builder.Services.AddScoped<IProjectCardFileExplorerService, ProjectCardFileExplo
 builder.Services.AddScoped<IFederatedProjectCardSearchService, FederatedProjectCardSearchService>();
 builder.Services.AddScoped<IReporterIdentityService, ReporterIdentityService>();
 builder.Services.AddScoped<ITflexAccessPreviewService, TflexAccessPreviewService>();
+builder.Services.AddScoped<ITflexAccessDecisionService, TflexAccessDecisionService>();
 
 builder.Services.AddDbContext<AppDbContext1>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-docs-pkb")));

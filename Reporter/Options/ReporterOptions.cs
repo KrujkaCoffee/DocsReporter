@@ -12,10 +12,21 @@ public sealed class ReporterOptions
     public int FederatedSourceTimeoutSeconds { get; set; } = 15;
     public int FederatedMaxPageSize { get; set; } = 100;
 
-    // Stage 5A: identity/access preview. Preview does not enforce T-FLEX ACL yet.
+    // Security modes:
+    // Disabled  - security diagnostics are disabled, reporter endpoints stay permissive.
+    // Preview   - identity and xAccessRights are visible in diagnostics, but are not enforced.
+    // AppPolicy - app.GroupAccessPolicy/app.RelationAccessPolicy are enforced.
+    // TflexRead - app policies plus source-scoped T-FLEX read rights are enforced.
     public string SecurityMode { get; set; } = "Preview";
     public string? DebugWindowsLogin { get; set; }
     public string? DebugWindowsSid { get; set; }
     public int SecurityMaxHierarchyDepth { get; set; } = 16;
     public int SecurityMaxRightsRows { get; set; } = 500;
+
+    // Stage 5B: T-FLEX read enforcement is intentionally conservative.
+    // CommandID=1 is treated as the read/open command when AccessGroupCommands is available.
+    public int TflexReadCommandId { get; set; } = 1;
+    public bool TflexDenyWhenNoReadRule { get; set; } = true;
+    public int TflexFilesReferenceId { get; set; } = 16;
+    public bool TflexReadFilterFiles { get; set; } = true;
 }

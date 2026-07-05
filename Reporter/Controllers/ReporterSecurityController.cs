@@ -14,15 +14,18 @@ public sealed class ReporterSecurityController : ControllerBase
 {
     private readonly IReporterIdentityService _identity;
     private readonly ITflexAccessPreviewService _accessPreview;
+    private readonly ITflexAccessDecisionService _accessDecision;
     private readonly ReporterOptions _options;
 
     public ReporterSecurityController(
         IReporterIdentityService identity,
         ITflexAccessPreviewService accessPreview,
+        ITflexAccessDecisionService accessDecision,
         IOptions<ReporterOptions> options)
     {
         _identity = identity;
         _accessPreview = accessPreview;
+        _accessDecision = accessDecision;
         _options = options.Value;
     }
 
@@ -69,6 +72,27 @@ public sealed class ReporterSecurityController : ControllerBase
             return NotFound();
 
         var result = await _accessPreview.PreviewAsync(
+            User,
+            sourceCode,
+            referenceId,
+            objectId,
+            ct);
+
+        return Ok(result);
+    }
+
+
+    [HttpGet("sources/{sourceCode}/references/{referenceId:int}/decision")]
+    public async Task<ActionResult<TflexAccessDecisionDto>> Decision(
+        string sourceCode,
+        int referenceId,
+        [FromQuery] long? objectId = null,
+        CancellationToken ct = default)
+    {
+        if (IsDisabled())
+            return NotFound();
+
+        var result = await _accessDecision.CanReadAsync(
             User,
             sourceCode,
             referenceId,

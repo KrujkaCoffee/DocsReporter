@@ -2,7 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const state = {
     sources: [],
     current: null,
-    preview: null
+    preview: null,
+    decision: null
   };
 
   const $ = (id) => document.getElementById(id);
@@ -174,19 +175,25 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     try {
-      state.preview = await fetchJson(
-        `/api/reporter/security/sources/`
+      const basePath = `/api/reporter/security/sources/`
         + `${encodeURIComponent(sourceCode)}`
-        + `/references/${referenceId}/preview`
-        + objectPart
-      );
+        + `/references/${referenceId}`;
+
+      const [preview, decision] = await Promise.all([
+        fetchJson(`${basePath}/preview${objectPart}`),
+        fetchJson(`${basePath}/decision${objectPart}`)
+      ]);
+
+      state.preview = preview;
+      state.decision = decision;
 
       renderPreview();
 
       setStatus(
         `Готово: `
         + `${get(state.preview, 'totalRows', 'TotalRows') ?? 0}`
-        + ` строк xAccessRights.`,
+        + ` строк xAccessRights, решение: `
+        + `${get(state.decision, 'status', 'Status') ?? '—'}.`,
         'ok'
       );
     } catch (error) {
@@ -388,6 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`
       : '';
 
+    renderDecision();
+
     $('securityRightsMeta').textContent =
       `${get(dto, 'applicableRows', 'ApplicableRows') ?? 0}`
       + `/`
@@ -499,6 +508,96 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="security-empty">
           Для выбранного reference/object строки не найдены.
         </div>`;
+  }
+
+  function renderDecision() {
+    const decision = state.decision || {};
+    const allowed = get(decision, 'allowed', 'Allowed');
+    const rules = asArray(get(decision, 'rules', 'Rules'));
+
+    $('securityDecision').innerHTML = [
+      row(
+        'Allowed',
+        allowed === true ? 'да' : allowed === false ? 'нет' : '—'
+      ),
+      row('Mode', get(decision, 'mode', 'Mode')),
+      row('Status', get(decision, 'status', 'Status')),
+      row('Reason', get(decision, 'reason', 'Reason')),
+      row('Reference', get(decision, 'referenceId', 'ReferenceId')),
+      row('Object', get(decision, 'objectId', 'ObjectId')),
+      row(
+        'Principal Object IDs',
+        asArray(
+          get(decision, 'principalObjectIds', 'PrincipalObjectIds')
+        ).join(', ') || '—'
+      ),
+      row('Rules total', get(decision, 'totalRules', 'TotalRules')),
+      row('Rules applicable', get(decision, 'applicableRules', 'ApplicableRules'))
+    ].join('');
+
+    $('securityDecision')
+      .classList.toggle('decision-allowed', allowed === true);
+    $('securityDecision')
+      .classList.toggle('decision-denied', allowed === false);
+
+    $('securityDecisionRules').innerHTML = rules.length
+      ? `
+        <table class="security-table rights-table">
+          <thead>
+            <tr>
+              <th>Прим.</th>
+              <th>Effect</th>
+              <th>Read cmd</th>
+              <th>Spec.</th>
+              <th>Scope</th>
+              <th>AccessGroup</th>
+              <th>UserID</th>
+              <th>Reference/Object</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rules.map(rule => {
+              const applies = get(
+                rule,
+                'appliesToCurrentPrincipal',
+                'AppliesToCurrentPrincipal'
+              );
+              const effect = get(rule, 'effect', 'Effect');
+              const readCommand = get(
+                rule,
+                'readCommandEnabled',
+                'ReadCommandEnabled'
+              );
+
+              return `
+                <tr class="${applies ? 'right-applies' : ''}">
+                  <td>${applies ? '●' : '○'}</td>
+                  <td>${escapeHtml(effect)}</td>
+                  <td>
+                    ${readCommand === true ? '+' : readCommand === false ? '−' : '—'}
+                  </td>
+                  <td>${escapeHtml(get(rule, 'specificity', 'Specificity'))}</td>
+                  <td>${escapeHtml(get(rule, 'scope', 'Scope'))}</td>
+                  <td>
+                    ${escapeHtml(get(rule, 'accessGroupId', 'AccessGroupId'))}
+                    ·
+                    ${escapeHtml(get(rule, 'accessGroupName', 'AccessGroupName') || '—')}
+                  </td>
+                  <td>${escapeHtml(get(rule, 'userId', 'UserId'))}</td>
+                  <td>
+                    ${escapeHtml(get(rule, 'referenceId', 'ReferenceId'))}
+                    /
+                    ${escapeHtml(get(rule, 'objectId', 'ObjectId'))}
+                  </td>
+                  <td class="commands-cell">
+                    ${escapeHtml(get(rule, 'reason', 'Reason') || '—')}
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`
+      : '<div class="security-empty">Decision rules не рассчитаны или режим не требует xAccessRights.</div>';
   }
 
   async function init() {

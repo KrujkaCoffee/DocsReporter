@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Security.Claims;
 using DocsApi.Reporter.Dto;
 using DocsApi.Reporter.Infrastructure;
+using DocsApi.Reporter.Options;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
 
 namespace DocsApi.Reporter.Services;
 
@@ -61,11 +63,19 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
 
     private readonly IReporterSqlConnectionFactory _factory;
     private readonly IReporterAccessService _access;
+    private readonly ITflexAccessDecisionService _accessDecision;
+    private readonly ReporterOptions _options;
 
-    public ProjectCardFileExplorerService(IReporterSqlConnectionFactory factory, IReporterAccessService access)
+    public ProjectCardFileExplorerService(
+        IReporterSqlConnectionFactory factory,
+        IReporterAccessService access,
+        ITflexAccessDecisionService accessDecision,
+        IOptions<ReporterOptions> options)
     {
         _factory = factory;
         _access = access;
+        _accessDecision = accessDecision;
+        _options = options.Value;
     }
 
     public async Task<IReadOnlyList<FileCategoryDto>> GetFileCategoriesAsync(
@@ -108,6 +118,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
                 ct);
 
             var roots = await BuildFileTreeBatchAsync(
+                user,
                 sourceCode,
                 src,
                 fileSchema,
@@ -120,6 +131,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
         }
 
         var tzRoots = await ReadTechnicalTaskRootsAsync(
+            user,
             sourceCode,
             src,
             fileSchema,
@@ -131,6 +143,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
         AddCategoryIfNotEmpty(result, "tz", "ТЗ", "Tekhnicheskoe_zadanie_Kar/Papka_TZ_Tekhnicheskoe_za", tzRoots);
 
         var documentRoots = await ReadProjectDocumentRootsAsync(
+            user,
             sourceCode,
             src,
             fileSchema,
@@ -142,6 +155,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
         AddCategoryIfNotEmpty(result, "documents", "Документы КП", "Link_891_1802", documentRoots);
 
         var nomenclatureFiles = await ReadNomenclatureDocumentFilesAsync(
+            user,
             sourceCode,
             src,
             fileSchema,
@@ -156,6 +170,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
     }
 
     private async Task<IReadOnlyList<FileTreeNodeDto>> ReadTechnicalTaskRootsAsync(
+        ClaimsPrincipal user,
         string sourceCode,
         SqlConnection src,
         FileSchema fileSchema,
@@ -209,10 +224,11 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
             }
         }
 
-        return await BuildFileTreeBatchAsync(sourceCode, src, fileSchema, fileIds, maxDepth, maxItems, ct);
+        return await BuildFileTreeBatchAsync(user, sourceCode, src, fileSchema, fileIds, maxDepth, maxItems, ct);
     }
 
     private async Task<IReadOnlyList<FileTreeNodeDto>> ReadProjectDocumentRootsAsync(
+        ClaimsPrincipal user,
         string sourceCode,
         SqlConnection src,
         FileSchema fileSchema,
@@ -254,6 +270,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
                         ct);
 
                     var fileNodes = await BuildFileTreeBatchAsync(
+                        user,
                         sourceCode,
                         src,
                         fileSchema,
@@ -269,13 +286,28 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
                     continue;
 
                 var relationMeta = await GetRelationMetaAsync(sourceCode, relationTable, ct);
-                var documentTable = relationMeta is null
-                    ? null
-                    : await GetGroupTableAsync(sourceCode, relationMeta.TargetGroupIdFor(ProjectCardGroupId), ct);
+                var documentGroupId = relationMeta?.TargetGroupIdFor(ProjectCardGroupId);
 
-                var documentPreview = string.IsNullOrWhiteSpace(documentTable)
+                if (_accessDecision.ShouldEnforceTflexRead && documentGroupId is not null)
+                {
+                    var documentDecision = await _accessDecision.CanReadAsync(
+                        user,
+                        sourceCode,
+                        documentGroupId.Value,
+                        documentId,
+                        ct);
+
+                    if (!documentDecision.Allowed)
+                        continue;
+                }
+
+                var documentTable = documentGroupId is null
                     ? null
-                    : await ReadObjectPreviewAsync(sourceCode, src, relationMeta!.TargetGroupIdFor(ProjectCardGroupId), documentTable!, documentId, ct);
+                    : await GetGroupTableAsync(sourceCode, documentGroupId, ct);
+
+                var documentPreview = string.IsNullOrWhiteSpace(documentTable) || documentGroupId is null
+                    ? null
+                    : await ReadObjectPreviewAsync(sourceCode, src, documentGroupId, documentTable!, documentId, ct);
 
                 var documentName = documentPreview?.Name ?? documentPreview?.ObjectCode ?? $"Документ {documentId.ToString(CultureInfo.InvariantCulture)}";
                 documentRootNodes.Add(new FileTreeNodeDto(
@@ -297,6 +329,7 @@ public sealed class ProjectCardFileExplorerService : IProjectCardFileExplorerSer
     }
 
     private async Task<IReadOnlyList<FileTreeNodeDto>> ReadNomenclatureDocumentFilesAsync(
+        ClaimsPrincipal user,
         string sourceCode,
         SqlConnection src,
         FileSchema fileSchema,
@@ -370,7 +403,7 @@ ORDER BY f.s_ObjectID;";
                 allFileIds.Add(Convert.ToInt64(r.GetValue(0), CultureInfo.InvariantCulture));
         }
 
-        return await BuildFileTreeBatchAsync(sourceCode, src, fileSchema, allFileIds, maxDepth, maxItems, ct);
+        return await BuildFileTreeBatchAsync(user, sourceCode, src, fileSchema, allFileIds, maxDepth, maxItems, ct);
     }
 
     private async Task<IReadOnlyList<long>> ReadTargetIdsFromRelationAsync(
@@ -430,6 +463,7 @@ WHERE {whereClause};";
     }
 
     private async Task<IReadOnlyList<FileTreeNodeDto>> BuildFileTreeBatchAsync(
+        ClaimsPrincipal user,
         string sourceCode,
         SqlConnection src,
         FileSchema fileSchema,
@@ -443,7 +477,7 @@ WHERE {whereClause};";
 
         foreach (var rootId in rootIds.Distinct().Take(maxItems))
         {
-            var node = await ReadFileNodeAsync(sourceCode, src, fileSchema, rootId, 0, maxDepth, maxItems, visited, ct);
+            var node = await ReadFileNodeAsync(user, sourceCode, src, fileSchema, rootId, 0, maxDepth, maxItems, visited, ct);
             if (node is not null)
                 nodes.Add(node);
         }
@@ -452,6 +486,7 @@ WHERE {whereClause};";
     }
 
     private async Task<FileTreeNodeDto?> ReadFileNodeAsync(
+        ClaimsPrincipal user,
         string sourceCode,
         SqlConnection src,
         FileSchema schema,
@@ -464,6 +499,19 @@ WHERE {whereClause};";
     {
         if (!visited.Add(objectId))
             return null;
+
+        if (_accessDecision.ShouldEnforceTflexRead && _options.TflexReadFilterFiles)
+        {
+            var decision = await _accessDecision.CanReadAsync(
+                user,
+                sourceCode,
+                _options.TflexFilesReferenceId,
+                objectId,
+                ct);
+
+            if (!decision.Allowed)
+                return null;
+        }
 
         var selectVersion = schema.VersionColumn is null ? "CAST(NULL AS int)" : $"TRY_CONVERT(int, {SqlHelpers.QuoteName(schema.VersionColumn)})";
         var selectGuid = schema.GuidColumn is null ? "CAST(NULL AS nvarchar(36))" : $"TRY_CONVERT(nvarchar(36), {SqlHelpers.QuoteName(schema.GuidColumn)})";
@@ -507,7 +555,7 @@ WHERE s_ObjectID = @objectId
             var childIds = await ReadChildFileIdsAsync(src, schema, objectId, maxItems, ct);
             foreach (var childId in childIds)
             {
-                var child = await ReadFileNodeAsync(sourceCode, src, schema, childId, currentDepth + 1, maxDepth, maxItems, visited, ct);
+                var child = await ReadFileNodeAsync(user, sourceCode, src, schema, childId, currentDepth + 1, maxDepth, maxItems, visited, ct);
                 if (child is not null)
                     children.Add(child);
             }

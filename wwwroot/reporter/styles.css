@@ -1141,3 +1141,10 @@ select {
     grid-column: auto;
   }
 }
+.decision-allowed {
+  border-left: 3px solid var(--green-2);
+}
+
+.decision-denied {
+  border-left: 3px solid var(--danger);
+}

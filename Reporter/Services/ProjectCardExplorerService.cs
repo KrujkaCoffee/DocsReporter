@@ -17,15 +17,18 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
     private const int ProjectCardGroupId = 891;
     private readonly IReporterSqlConnectionFactory _factory;
     private readonly IReporterAccessService _access;
+    private readonly ITflexAccessDecisionService _accessDecision;
     private readonly IProjectCardFileExplorerService _files;
 
     public ProjectCardExplorerService(
         IReporterSqlConnectionFactory factory,
         IReporterAccessService access,
+        ITflexAccessDecisionService accessDecision,
         IProjectCardFileExplorerService files)
     {
         _factory = factory;
         _access = access;
+        _accessDecision = accessDecision;
         _files = files;
     }
 
@@ -37,13 +40,18 @@ public sealed class ProjectCardExplorerService : IProjectCardExplorerService
         int pageSize,
         CancellationToken ct)
     {
-        //var access = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
-        //if (access is null || !access.CanSearch)
-        //    throw new UnauthorizedAccessException("No access to search project cards.");
+        EffectiveGroupAccessDto? access = null;
+        if (_accessDecision.ShouldEnforceAppPolicy)
+        {
+            access = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
+            if (access is null || !access.CanSearch)
+                throw new UnauthorizedAccessException("No access to search project cards.");
+        }
 
         page = Math.Max(1, page);
-        //pageSize = Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        pageSize = access is null
+            ? Math.Clamp(pageSize, 1, 100)
+            : Math.Clamp(pageSize, 1, Math.Min(access.MaxRowsPerPage, 500));
         var offset = (page - 1) * pageSize;
         var baseDocsUrl = await GetBaseDocsUrlAsync(sourceCode, ct);
 
@@ -115,7 +123,24 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
                 r.GetNullableString("Name"),
                 BuildDocsUrl(baseDocsUrl, ProjectCardGroupId, objectId)));
         }
-        return result;
+        if (!_accessDecision.ShouldEnforceTflexRead)
+            return result;
+
+        var filtered = new List<ProjectCardSearchItemDto>(result.Count);
+        foreach (var item in result)
+        {
+            var decision = await _accessDecision.CanReadAsync(
+                user,
+                sourceCode,
+                ProjectCardGroupId,
+                item.ObjectId,
+                ct);
+
+            if (decision.Allowed)
+                filtered.Add(item);
+        }
+
+        return filtered;
     }
 
     public async Task<ProjectCardFullDto?> GetFullCardAsync(
@@ -126,16 +151,36 @@ OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;";
         int requestedFileDepth,
         CancellationToken ct)
     {
-        //var groupAccess = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
-        //if (groupAccess is null || !groupAccess.CanOpenCard)
-        //    throw new UnauthorizedAccessException("No access to open project card.");
+        EffectiveGroupAccessDto? groupAccess = null;
+        if (_accessDecision.ShouldEnforceAppPolicy)
+        {
+            groupAccess = await _access.GetGroupAccessAsync(user, sourceCode, ProjectCardGroupId, ct);
+            if (groupAccess is null || !groupAccess.CanOpenCard)
+                throw new UnauthorizedAccessException("No access to open project card.");
+        }
 
-        var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, 3), 0, 3);
-        var effectiveFileDepth = Math.Clamp(Math.Min(requestedFileDepth, 4), 0, 6);
-        //var effectiveDepth = Math.Clamp(Math.Min(requestedDepth, groupAccess.MaxObjectDepth), 0, 3);
-        //var effectiveFileDepth = Math.Clamp(Math.Min(requestedFileDepth, groupAccess.MaxFileTreeDepth), 0, 6);
-        //var maxRelated = groupAccess.MaxRelatedObjects;
-        var maxRelated = 500;
+        if (_accessDecision.ShouldEnforceTflexRead)
+        {
+            var decision = await _accessDecision.CanReadAsync(
+                user,
+                sourceCode,
+                ProjectCardGroupId,
+                objectId,
+                ct);
+
+            if (!decision.Allowed)
+                throw new UnauthorizedAccessException(decision.Reason);
+        }
+
+        var effectiveDepth = groupAccess is null
+            ? Math.Clamp(Math.Min(requestedDepth, 3), 0, 3)
+            : Math.Clamp(Math.Min(requestedDepth, groupAccess.MaxObjectDepth), 0, 3);
+
+        var effectiveFileDepth = groupAccess is null
+            ? Math.Clamp(Math.Min(requestedFileDepth, 4), 0, 6)
+            : Math.Clamp(Math.Min(requestedFileDepth, groupAccess.MaxFileTreeDepth), 0, 6);
+
+        var maxRelated = groupAccess?.MaxRelatedObjects ?? 500;
 
         await using var src = await _factory.OpenSourceConnectionAsync(sourceCode, ct);
         var card = await ReadObjectPreviewAsync(sourceCode, src, ProjectCardGroupId, "Kartochka_proekta", objectId, ct);
@@ -180,6 +225,19 @@ WHERE MasterID = @objectId OR SlaveID = @objectId;";
                     var direction = masterId == objectId ? "OUT" : "IN";
                     var targetId = direction == "OUT" ? slaveId : masterId;
                     var targetGroupId = direction == "OUT" ? relMeta.SlaveGroupId : relMeta.MasterGroupId;
+
+                    if (_accessDecision.ShouldEnforceTflexRead && targetGroupId is not null)
+                    {
+                        var targetDecision = await _accessDecision.CanReadAsync(
+                            user,
+                            sourceCode,
+                            targetGroupId.Value,
+                            targetId,
+                            ct);
+
+                        if (!targetDecision.Allowed)
+                            continue;
+                    }
 
                     ObjectPreviewDto? target = null;
                     if (effectiveDepth > 1 && targetGroupId is not null)
@@ -232,7 +290,9 @@ WHERE MasterID = @objectId OR SlaveID = @objectId;";
                 ["propertyCount"] = properties.Count,
                 ["relationCount"] = relations.Count,
                 ["fileCategoryCount"] = fileCategories.Count,
-                ["fileCount"] = fileCategories.Sum(x => x.FileCount)
+                ["fileCount"] = fileCategories.Sum(x => x.FileCount),
+                ["appPolicyEnforced"] = _accessDecision.ShouldEnforceAppPolicy,
+                ["tflexReadEnforced"] = _accessDecision.ShouldEnforceTflexRead
             });
     }
 

@@ -225,3 +225,32 @@ public sealed record TflexAccessPreviewDto(
     int ApplicableRows,
     IReadOnlyList<TflexAccessRightRowDto> Rows,
     IReadOnlyList<string> Warnings);
+
+public sealed record TflexAccessDecisionRuleDto(
+    int AccessTypeId,
+    int AccessGroupId,
+    string? AccessGroupName,
+    long UserId,
+    bool AppliesToCurrentPrincipal,
+    int ReferenceId,
+    long ObjectId,
+    string Scope,
+    string Effect,
+    bool? ReadCommandEnabled,
+    int Specificity,
+    string? Reason);
+
+public sealed record TflexAccessDecisionDto(
+    string SourceCode,
+    int ReferenceId,
+    long? ObjectId,
+    bool Allowed,
+    string Mode,
+    string Status,
+    string Reason,
+    ReporterSourceIdentityDto Identity,
+    IReadOnlyList<long> PrincipalObjectIds,
+    int TotalRules,
+    int ApplicableRules,
+    IReadOnlyList<TflexAccessDecisionRuleDto> Rules,
+    IReadOnlyList<string> Warnings);

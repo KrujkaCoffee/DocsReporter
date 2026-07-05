@@ -22,8 +22,9 @@
     <section class="security-notice">
       <strong>Preview-режим.</strong>
       Страница сопоставляет Windows-пользователя с Users/UserParameters,
-      раскрывает UsersHierarchy и показывает исходные строки xAccessRights.
-      Выдача карточек пока не фильтруется этими строками.
+      раскрывает UsersHierarchy, показывает исходные строки xAccessRights
+      и рассчитывает Stage 5B read decision. Фактическое применение зависит
+      от Reporter:SecurityMode.
     </section>
 
     <section class="security-controls panel">
@@ -125,6 +126,22 @@
         <div
           id="securityReference"
           class="security-card-body"></div>
+      </article>
+
+
+      <article class="panel security-card security-wide">
+        <div class="panel-header">
+          <div>
+            <h2>Stage 5B read decision</h2>
+            <span class="panel-meta">sourceCode + ParameterGroups.PK + s_ObjectID</span>
+          </div>
+        </div>
+        <div
+          id="securityDecision"
+          class="security-card-body"></div>
+        <div
+          id="securityDecisionRules"
+          class="security-table-wrap"></div>
       </article>
 
       <article class="panel security-card security-wide">

@@ -28,17 +28,15 @@ public sealed class ProjectCardsController : ControllerBase
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
-        return Ok(result);
-        //try
-        //{
-        //    var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
-        //    return Ok(result);
-        //}
-        //catch (UnauthorizedAccessException)
-        //{
-        //    return Forbid();
-        //}
+        try
+        {
+            var result = await _projectCards.SearchAsync(User, sourceCode, query, page, pageSize, ct);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 
     [HttpGet("{objectId:long}/full-card")]
@@ -68,7 +66,14 @@ public sealed class ProjectCardsController : ControllerBase
         [FromQuery] int maxItems = 500,
         CancellationToken ct = default)
     {
-        var result = await _files.GetFileCategoriesAsync(User, sourceCode, objectId, fileDepth, maxItems, ct);
-        return Ok(result);
+        try
+        {
+            var result = await _files.GetFileCategoriesAsync(User, sourceCode, objectId, fileDepth, maxItems, ct);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 }
