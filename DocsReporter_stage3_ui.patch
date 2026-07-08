@@ -12,7 +12,7 @@ diff -ruN dr_stage3_orig/DocsReporter-master/Program.cs dr_stage3/DocsReporter-m
 +
  app.UseRouting();
  
--// ï¿½ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ MapControllers
+-// ÂÀÆÍÎ: äî MapControllers
 +// Ğ’ĞĞ–ĞĞ: Ğ´Ğ¾ MapControllers
  app.UseAuthentication();
  app.UseAuthorization();

@@ -254,3 +254,95 @@ public sealed record TflexAccessDecisionDto(
     int ApplicableRules,
     IReadOnlyList<TflexAccessDecisionRuleDto> Rules,
     IReadOnlyList<string> Warnings);
+
+public sealed record ReporterAdminRoleDto(
+    int AppRoleId,
+    string Code,
+    string DisplayName,
+    bool IsSystem);
+
+public sealed record ReporterAdminOverviewDto(
+    string SourceCode,
+    string RoleCode,
+    int SourceCount,
+    int RoleCount,
+    int TotalGroupCount,
+    int EnabledGroupPolicyCount,
+    int TotalRelationCount,
+    int EnabledRelationPolicyCount,
+    string SecurityMode,
+    bool AdminPreviewOpen);
+
+public sealed record ReporterAdminGroupPolicyDto(
+    string SourceCode,
+    int GroupId,
+    string? GroupGuid,
+    string TableName,
+    string? Caption,
+    int Type,
+    bool? VisibleInTflex,
+    string RoleCode,
+    bool IsPolicyConfigured,
+    bool IsSourceSpecific,
+    bool IsEnabled,
+    bool CanSeeInMenu,
+    bool CanSearch,
+    bool CanOpenCard,
+    bool CanExport,
+    int MaxObjectDepth,
+    int MaxFileTreeDepth,
+    int MaxRowsPerPage,
+    int MaxRelatedObjects);
+
+public sealed record ReporterAdminRelationPolicyDto(
+    string SourceCode,
+    int RelationGroupId,
+    string? RelationGuid,
+    string RelationTable,
+    string? RelationCaption,
+    int? MasterGroupId,
+    string? MasterTableName,
+    string? MasterCaption,
+    int? SlaveGroupId,
+    string? SlaveTableName,
+    string? SlaveCaption,
+    string RoleCode,
+    bool IsPolicyConfigured,
+    bool IsSourceSpecific,
+    bool IsEnabled,
+    string? DisplayName,
+    string? CategoryCode,
+    string? CategoryTitle,
+    bool CanTraverse,
+    bool ShowInCard,
+    bool ShowInTree,
+    int MaxDepth,
+    int MaxItems,
+    string DirectionMode);
+
+public sealed record ReporterAdminGroupPolicyUpdateDto(
+    bool? IsEnabled,
+    bool? CanSeeInMenu,
+    bool? CanSearch,
+    bool? CanOpenCard,
+    bool? CanExport,
+    int? MaxObjectDepth,
+    int? MaxFileTreeDepth,
+    int? MaxRowsPerPage,
+    int? MaxRelatedObjects);
+
+public sealed record ReporterAdminRelationPolicyUpdateDto(
+    bool? IsEnabled,
+    string? DisplayName,
+    string? CategoryCode,
+    string? CategoryTitle,
+    bool? CanTraverse,
+    bool? ShowInCard,
+    bool? ShowInTree,
+    int? MaxDepth,
+    int? MaxItems,
+    string? DirectionMode);
+
+public sealed record ReporterAdminMutationResultDto(
+    string Status,
+    string Message);

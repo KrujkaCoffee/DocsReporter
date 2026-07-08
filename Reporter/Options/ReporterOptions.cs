@@ -29,4 +29,9 @@ public sealed class ReporterOptions
     public bool TflexDenyWhenNoReadRule { get; set; } = true;
     public int TflexFilesReferenceId { get; set; } = 16;
     public bool TflexReadFilterFiles { get; set; } = true;
+
+    // Stage 6: lightweight reporter admin UI. In Preview mode it can be opened without Windows Auth
+    // to keep manual testing simple. In AppPolicy/TflexRead modes admin endpoints require ReportAdmin or Developer role.
+    public bool AdminAllowAnonymousInPreview { get; set; } = true;
+    public int AdminDefaultTake { get; set; } = 200;
 }

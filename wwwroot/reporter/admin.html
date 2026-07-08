@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs Reporter — админка</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="security-page admin-page">
+  <main class="security-shell admin-shell">
+    <header class="security-header">
+      <div>
+        <span class="breadcrumb">Docs Reporter / Мини-админка</span>
+        <h1>Справочники, связи и лимиты</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="swagger-link" href="./index.html">← К просмотру</a>
+        <a class="swagger-link" href="./security.html">Доступ</a>
+        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
+      </div>
+    </header>
+
+    <section class="security-notice">
+      <strong>Stage 6.</strong>
+      Управление видимостью справочников, глубиной раскрытия, количеством связанных объектов и файловыми/объектными связями.
+      В Preview-режиме страница может быть открыта без WinAuth для ручного тестирования.
+    </section>
+
+    <section class="security-controls panel admin-controls">
+      <label>
+        <span>Источник</span>
+        <select id="adminSource"></select>
+      </label>
+
+      <label>
+        <span>Роль</span>
+        <select id="adminRole"></select>
+      </label>
+
+      <label>
+        <span>Поиск</span>
+        <input id="adminQuery" type="search" placeholder="Kartochka, Link_891, 891" />
+      </label>
+
+      <label class="checkbox-field">
+        <input id="adminEnabledOnly" type="checkbox" />
+        <span>Только включенные</span>
+      </label>
+
+      <button id="adminRefresh" class="primary-btn" type="button">Обновить</button>
+      <button id="adminDiscover" class="ghost-btn" type="button">Discovery</button>
+      <button id="adminBootstrap" class="ghost-btn" type="button">Bootstrap KPI</button>
+    </section>
+
+    <section id="adminStatus" class="status-log security-status">Загрузка…</section>
+
+    <section id="adminOverview" class="admin-overview"></section>
+
+    <section class="admin-tabs panel">
+      <button class="admin-tab active" type="button" data-admin-tab="groups">Справочники</button>
+      <button class="admin-tab" type="button" data-admin-tab="relations">Связи</button>
+    </section>
+
+    <section class="security-grid admin-grid">
+      <article class="panel admin-list-card">
+        <div class="panel-header">
+          <div>
+            <h2 id="adminListTitle">Справочники</h2>
+            <span id="adminListMeta" class="panel-meta">Нет данных</span>
+          </div>
+        </div>
+        <div id="adminList" class="admin-list"></div>
+      </article>
+
+      <article class="panel admin-editor-card">
+        <div class="panel-header">
+          <div>
+            <h2 id="adminEditorTitle">Настройки</h2>
+            <span id="adminEditorMeta" class="panel-meta">Выберите строку слева</span>
+          </div>
+        </div>
+        <form id="adminEditor" class="admin-editor">
+          <div class="security-empty">Выберите справочник или связь.</div>
+        </form>
+      </article>
+    </section>
+  </main>
+
+  <script src="./admin.js" defer></script>
+</body>
+</html>
