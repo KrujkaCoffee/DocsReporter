@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus(`Источников: ${state.sources.length}`, 'ok');
     } catch (error) {
       state.sources = FALLBACK_SOURCES;
-      setStatus(`Не удалось получить список источников, включен fallback: ${error.message}`, 'error');
+      setStatus(`Не удалось получить список источников, включен резервный режим: ${error.message}`, 'error');
     }
 
     if (!state.selectedSources.size && state.sources.length) {
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const health = await fetchJson(`/api/reporter/sources/${encodeURIComponent(sourceCode)}/health`);
       healthElement.textContent = 'ok';
       healthElement.classList.add('ok');
-      setStatus(`${sourceCode}: ${get(health, 'database', 'Database') ?? 'online'}`, 'ok');
+      setStatus(`${sourceCode}: ${get(health, 'database', 'Database') ?? 'доступен'}`, 'ok');
     } catch (error) {
       healthElement.textContent = '!';
       healthElement.classList.add('fail');

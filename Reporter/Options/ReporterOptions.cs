@@ -34,4 +34,10 @@ public sealed class ReporterOptions
     // to keep manual testing simple. In AppPolicy/TflexRead modes admin endpoints require ReportAdmin or Developer role.
     public bool AdminAllowAnonymousInPreview { get; set; } = true;
     public int AdminDefaultTake { get; set; } = 200;
+
+    // Этап 7: безопасный универсальный просмотр справочников.
+    public int ReferenceBrowserDefaultPageSize { get; set; } = 50;
+    public int ReferenceBrowserMaxPageSize { get; set; } = 100;
+    public int ReferenceBrowserMaxFields { get; set; } = 24;
+    public int ReferenceBrowserMaxSources { get; set; } = 10;
 }

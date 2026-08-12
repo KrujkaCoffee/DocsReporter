@@ -53,6 +53,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return response.json();
   }
 
+  function securityModeLabel(value) {
+    const key = String(value || '').toLowerCase();
+    if (key === 'preview') return 'Предварительная проверка';
+    if (key === 'apppolicy') return 'Политики репортера';
+    if (key === 'tflexread') return 'Права чтения T-FLEX';
+    if (key === 'disabled') return 'Отключено';
+    return value || '—';
+  }
+
   function setStatus(message, kind = 'info') {
     const node = $('securityStatus');
 
@@ -129,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         get(dto, 'authenticationType', 'AuthenticationType')
       ),
       row(
-        'Debug identity',
+        'Тестовый пользователь',
         get(dto, 'isDebugIdentity', 'IsDebugIdentity')
           ? 'да'
           : 'нет'
@@ -140,8 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
         roles.length ? roles.join(', ') : '—'
       ),
       row(
-        'Security mode',
-        get(dto, 'securityMode', 'SecurityMode')
+        'Режим доступа',
+        securityModeLabel(get(dto, 'securityMode', 'SecurityMode'))
       )
     ].join('');
   }
@@ -520,8 +529,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'Allowed',
         allowed === true ? 'да' : allowed === false ? 'нет' : '—'
       ),
-      row('Mode', get(decision, 'mode', 'Mode')),
-      row('Status', get(decision, 'status', 'Status')),
+      row('Режим', securityModeLabel(get(decision, 'mode', 'Mode'))),
+      row('Статус', get(decision, 'status', 'Status')),
       row('Reason', get(decision, 'reason', 'Reason')),
       row('Reference', get(decision, 'referenceId', 'ReferenceId')),
       row('Object', get(decision, 'objectId', 'ObjectId')),

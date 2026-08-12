@@ -14,17 +14,18 @@
         <h1>Пользователь и права T-FLEX</h1>
       </div>
       <div class="topbar-actions">
-        <a class="swagger-link" href="./index.html">← К просмотру</a>
-        <a class="swagger-link" href="./admin.html">Админка</a>
-        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
+        <a class="swagger-link" href="./index.html">Карточки проектов</a>
+        <a class="swagger-link" href="./references.html">Справочники</a>
+        <a class="swagger-link" href="./admin.html">Управление</a>
+        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Описание API</a>
       </div>
     </header>
 
     <section class="security-notice">
-      <strong>Preview-режим.</strong>
+      <strong>Режим предварительной проверки.</strong>
       Страница сопоставляет Windows-пользователя с Users/UserParameters,
       раскрывает UsersHierarchy, показывает исходные строки xAccessRights
-      и рассчитывает Stage 5B read decision. Фактическое применение зависит
+      и рассчитывает решение о доступе на чтение этапа 5Б. Фактическое применение зависит
       от Reporter:SecurityMode.
     </section>
 
@@ -35,7 +36,7 @@
       </label>
 
       <label>
-        <span>Reference ID / ParameterGroups.PK</span>
+        <span>ID справочника / ParameterGroups.PK</span>
         <input
           id="securityReferenceId"
           type="number"
@@ -44,7 +45,7 @@
       </label>
 
       <label>
-        <span>Object ID, необязательно</span>
+        <span>ID объекта, необязательно</span>
         <input
           id="securityObjectId"
           type="number"
@@ -70,7 +71,7 @@
       <article class="panel security-card">
         <div class="panel-header">
           <div>
-            <h2>Web / Windows identity</h2>
+            <h2>Пользователь веб-приложения / Windows</h2>
             <span class="panel-meta">app.AppUser и роли</span>
           </div>
         </div>
@@ -82,7 +83,7 @@
       <article class="panel security-card">
         <div class="panel-header">
           <div>
-            <h2>T-FLEX identity</h2>
+            <h2>Пользователь T-FLEX</h2>
             <span class="panel-meta">Users + UserParameters</span>
           </div>
         </div>
@@ -133,7 +134,7 @@
       <article class="panel security-card security-wide">
         <div class="panel-header">
           <div>
-            <h2>Stage 5B read decision</h2>
+            <h2>Решение о доступе на чтение</h2>
             <span class="panel-meta">sourceCode + ParameterGroups.PK + s_ObjectID</span>
           </div>
         </div>

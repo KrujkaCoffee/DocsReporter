@@ -10,20 +10,21 @@
   <main class="security-shell admin-shell">
     <header class="security-header">
       <div>
-        <span class="breadcrumb">Docs Reporter / Мини-админка</span>
+        <span class="breadcrumb">Docs Reporter / Управление</span>
         <h1>Справочники, связи и лимиты</h1>
       </div>
       <div class="topbar-actions">
-        <a class="swagger-link" href="./index.html">← К просмотру</a>
-        <a class="swagger-link" href="./security.html">Доступ</a>
-        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Swagger</a>
+        <a class="swagger-link" href="./index.html">Карточки проектов</a>
+        <a class="swagger-link" href="./references.html">Справочники</a>
+        <a class="swagger-link" href="./security.html">Права</a>
+        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Описание API</a>
       </div>
     </header>
 
     <section class="security-notice">
-      <strong>Stage 6.</strong>
+      <strong>Этап 6.</strong>
       Управление видимостью справочников, глубиной раскрытия, количеством связанных объектов и файловыми/объектными связями.
-      В Preview-режиме страница может быть открыта без WinAuth для ручного тестирования.
+      В режиме предварительной проверки страница может быть открыта без WinAuth для ручного тестирования.
     </section>
 
     <section class="security-controls panel admin-controls">
@@ -48,8 +49,8 @@
       </label>
 
       <button id="adminRefresh" class="primary-btn" type="button">Обновить</button>
-      <button id="adminDiscover" class="ghost-btn" type="button">Discovery</button>
-      <button id="adminBootstrap" class="ghost-btn" type="button">Bootstrap KPI</button>
+      <button id="adminDiscover" class="ghost-btn" type="button">Синхронизировать метаданные</button>
+      <button id="adminBootstrap" class="ghost-btn" type="button">Создать начальные настройки</button>
     </section>
 
     <section id="adminStatus" class="status-log security-status">Загрузка…</section>

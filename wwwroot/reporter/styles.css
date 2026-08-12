@@ -1382,3 +1382,334 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Этап 7: универсальный просмотр справочников */
+.references-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(54, 65, 74, .08), transparent 34%),
+    var(--page-bg, #eceff1);
+}
+
+.references-shell {
+  width: min(1880px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 20px 0 32px;
+}
+
+.references-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1fr) minmax(260px, 1.5fr) 150px auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  margin: 14px 0;
+}
+
+.references-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.references-controls label > span {
+  color: var(--muted, #68737d);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.references-controls input,
+.references-controls select {
+  width: 100%;
+  min-height: 40px;
+}
+
+.references-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, .72fr) minmax(620px, 1.8fr) minmax(310px, .9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.references-catalog-panel,
+.references-table-panel,
+.references-detail-panel {
+  min-height: 640px;
+  overflow: hidden;
+}
+
+.references-catalog,
+.references-detail {
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+}
+
+.reference-catalog-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid rgba(91, 102, 111, .14);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.reference-catalog-item:hover,
+.reference-catalog-item.active {
+  background: rgba(72, 87, 98, .09);
+}
+
+.reference-catalog-item.active {
+  box-shadow: inset 3px 0 0 var(--accent, #c9792b);
+}
+
+.reference-catalog-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: #4d5962;
+  color: #fff;
+  font-weight: 800;
+}
+
+.reference-catalog-text {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.reference-catalog-text strong,
+.reference-catalog-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-catalog-text small {
+  color: var(--muted, #6f7980);
+  font-size: 11px;
+}
+
+.references-table-header {
+  align-items: center;
+}
+
+.reference-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted, #68737d);
+}
+
+.reference-warnings {
+  display: grid;
+  gap: 4px;
+  padding: 0 14px;
+  color: #8b5a24;
+  font-size: 12px;
+}
+
+.reference-warnings:empty {
+  display: none;
+}
+
+.references-table-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 350px);
+}
+
+.reference-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.reference-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #edf0f2;
+  color: #4b555d;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+  padding: 10px 12px;
+  border-bottom: 1px solid #cdd3d7;
+}
+
+.reference-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(91, 102, 111, .13);
+  vertical-align: top;
+  max-width: 300px;
+  overflow-wrap: anywhere;
+}
+
+.reference-row {
+  cursor: pointer;
+}
+
+.reference-row:hover,
+.reference-row.active {
+  background: rgba(201, 121, 43, .08);
+}
+
+.reference-row.active {
+  box-shadow: inset 3px 0 0 var(--accent, #c9792b);
+}
+
+.reference-object-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding-left: calc(var(--tree-depth, 0) * 20px);
+  min-width: 230px;
+}
+
+.reference-object-cell > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.reference-object-cell strong {
+  overflow-wrap: anywhere;
+}
+
+.reference-object-cell small {
+  color: var(--muted, #6d7780);
+  font-size: 11px;
+}
+
+.reference-expand,
+.reference-expand-placeholder {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+
+.reference-expand {
+  border: 1px solid #b7c0c6;
+  background: #fff;
+  border-radius: 3px;
+  color: #46515a;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.references-detail {
+  padding: 14px;
+}
+
+.reference-detail-hero {
+  padding: 14px;
+  background: linear-gradient(145deg, #404a52, #5d6870);
+  color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 8px 20px rgba(38, 48, 56, .14);
+}
+
+.reference-detail-hero h3 {
+  margin: 7px 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.reference-detail-hero p {
+  margin: 0;
+  color: rgba(255,255,255,.78);
+}
+
+.reference-detail-id {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: rgba(255,255,255,.65);
+}
+
+.reference-detail-actions {
+  margin-top: 12px;
+}
+
+.reference-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.reference-property-list {
+  margin: 14px 0 0;
+  display: grid;
+}
+
+.reference-property-list > div {
+  display: grid;
+  gap: 4px;
+  padding: 9px 2px;
+  border-bottom: 1px solid rgba(91, 102, 111, .14);
+}
+
+.reference-property-list dt {
+  color: var(--muted, #6c7780);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+}
+
+.reference-property-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1350px) {
+  .references-controls {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+
+  .references-grid {
+    grid-template-columns: 260px minmax(520px, 1fr);
+  }
+
+  .references-detail-panel {
+    grid-column: 1 / -1;
+    min-height: auto;
+  }
+
+  .references-detail {
+    max-height: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .references-shell {
+    width: min(100% - 16px, 1880px);
+  }
+
+  .references-controls,
+  .references-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .references-catalog-panel,
+  .references-table-panel,
+  .references-detail-panel {
+    min-height: auto;
+  }
+
+  .references-catalog,
+  .references-table-wrap {
+    max-height: 560px;
+  }
+}
+

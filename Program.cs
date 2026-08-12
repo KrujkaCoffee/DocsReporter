@@ -30,6 +30,7 @@ builder.Services.AddScoped<IReporterIdentityService, ReporterIdentityService>();
 builder.Services.AddScoped<ITflexAccessPreviewService, TflexAccessPreviewService>();
 builder.Services.AddScoped<ITflexAccessDecisionService, TflexAccessDecisionService>();
 builder.Services.AddScoped<IReporterAdminCatalogService, ReporterAdminCatalogService>();
+builder.Services.AddScoped<IReporterReferenceBrowserService, ReporterReferenceBrowserService>();
 
 builder.Services.AddDbContext<AppDbContext1>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("srv-docs-pkb")));
@@ -79,5 +80,7 @@ app.MapGet("/", () => Results.Redirect("/reporter/index.html"));
 app.MapGet("/reporter", () => Results.Redirect("/reporter/index.html"));
 app.MapGet("/reporter/security", () => Results.Redirect("/reporter/security.html"));
 app.MapGet("/reporter/admin", () => Results.Redirect("/reporter/admin.html"));
+app.MapGet("/reporter/references", () => Results.Redirect("/reporter/references.html"));
+app.MapGet("/reporter/spravochniki", () => Results.Redirect("/reporter/references.html"));
 
 app.Run();

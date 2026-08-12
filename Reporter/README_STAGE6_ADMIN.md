@@ -1,4 +1,4 @@
-# Stage 6 — мини-админка репортера
+# Этап 6 — мини-админка репортера
 
 Добавлен read-only friendly admin shell для управления тем, что видно в веб-репортере:
 
@@ -9,7 +9,7 @@
 - лимиты строк и связанных объектов;
 - включение/отключение связей;
 - категории файловых/объектных связей;
-- запуск discovery и bootstrap из UI.
+- запуск синхронизации метаданных и начальной настройки из интерфейса.
 
 Страница:
 
@@ -33,7 +33,7 @@ POST /api/reporter/admin/bootstrap/project-card-viewer/{sourceCode}
 
 ## Доступ к админке
 
-В `Reporter:SecurityMode = Preview` и `Reporter:AdminAllowAnonymousInPreview = true` страница доступна без WinAuth для ручного тестирования.
+В режиме `Reporter:SecurityMode = Preview` и `Reporter:AdminAllowAnonymousInPreview = true` страница доступна без WinAuth для ручного тестирования.
 
 В режимах `AppPolicy` и `TflexRead` admin endpoints требуют роль репортера:
 

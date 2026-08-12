@@ -59,6 +59,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return value === true || value === 'true' || value === 1;
   }
 
+  function securityModeLabel(value) {
+    const key = String(value || '').toLowerCase();
+    if (key === 'preview') return 'Предварительная проверка';
+    if (key === 'apppolicy') return 'Политики репортера';
+    if (key === 'tflexread') return 'Права чтения T-FLEX';
+    if (key === 'disabled') return 'Отключено';
+    return value || '—';
+  }
+
   function setStatus(message, kind = 'info') {
     const prefix = kind === 'error' ? 'Ошибка' : kind === 'ok' ? 'Готово' : 'Статус';
     status.textContent = `${prefix}: ${message}`;
@@ -128,14 +137,14 @@ document.addEventListener('DOMContentLoaded', () => {
       state.sources = asArray(await fetchJson('/api/reporter/admin/sources'));
     } catch (error) {
       state.sources = FALLBACK_SOURCES;
-      setStatus(`Источники из админ API не получены, fallback: ${error.message}`, 'error');
+      setStatus(`Источники из админ API не получены, резервный список: ${error.message}`, 'error');
     }
 
     try {
       state.roles = asArray(await fetchJson('/api/reporter/admin/roles'));
     } catch (error) {
       state.roles = [{ code: 'ProjectCardViewer', displayName: 'ProjectCardViewer' }];
-      setStatus(`Роли из админ API не получены, fallback: ${error.message}`, 'error');
+      setStatus(`Роли из админ API не получены, резервный список: ${error.message}`, 'error');
     }
 
     renderSelects(saved);
@@ -180,10 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const data = await fetchJson(`/api/reporter/admin/overview?sourceCode=${encodeURIComponent(sourceCode())}&roleCode=${encodeURIComponent(roleCode())}`);
       const cards = [
-        ['Security', get(data, 'securityMode', 'SecurityMode')],
-        ['Sources', get(data, 'sourceCount', 'SourceCount')],
-        ['Groups', `${get(data, 'enabledGroupPolicyCount', 'EnabledGroupPolicyCount')}/${get(data, 'totalGroupCount', 'TotalGroupCount')}`],
-        ['Relations', `${get(data, 'enabledRelationPolicyCount', 'EnabledRelationPolicyCount')}/${get(data, 'totalRelationCount', 'TotalRelationCount')}`]
+        ['Режим доступа', securityModeLabel(get(data, 'securityMode', 'SecurityMode'))],
+        ['Источники', get(data, 'sourceCount', 'SourceCount')],
+        ['Справочники', `${get(data, 'enabledGroupPolicyCount', 'EnabledGroupPolicyCount')}/${get(data, 'totalGroupCount', 'TotalGroupCount')}`],
+        ['Связи', `${get(data, 'enabledRelationPolicyCount', 'EnabledRelationPolicyCount')}/${get(data, 'totalRelationCount', 'TotalRelationCount')}`]
       ];
       overview.innerHTML = cards.map(([label, value]) => `
         <div class="admin-overview-card">
@@ -373,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ${textField('categoryCode', 'Код категории', get(rel, 'categoryCode', 'CategoryCode') || 'relation')}
         ${textField('categoryTitle', 'Заголовок категории', get(rel, 'categoryTitle', 'CategoryTitle') || title)}
         <label><span>Направление</span><select name="directionMode">
-          ${['Both', 'MasterToSlave', 'SlaveToMaster'].map(value => `<option value="${value}" ${String(get(rel, 'directionMode', 'DirectionMode') || 'Both') === value ? 'selected' : ''}>${value}</option>`).join('')}
+          ${[{ value: 'Both', label: 'Оба направления' }, { value: 'MasterToSlave', label: 'От главного к связанному' }, { value: 'SlaveToMaster', label: 'От связанного к главному' }].map(item => `<option value="${item.value}" ${String(get(rel, 'directionMode', 'DirectionMode') || 'Both') === item.value ? 'selected' : ''}>${item.label}</option>`).join('')}
         </select></label>
         ${numberField('maxDepth', 'Глубина связи', get(rel, 'maxDepth', 'MaxDepth'), 0, 3)}
         ${numberField('maxItems', 'Лимит элементов', get(rel, 'maxItems', 'MaxItems'), 1, 5000)}
@@ -459,16 +468,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function runDiscovery() {
-    setStatus('Discovery ParameterGroups…');
+    setStatus('Синхронизация метаданных справочников и связей…');
     const data = await fetchJson(`/api/reporter/admin/discovery/${encodeURIComponent(sourceCode())}/parameter-groups`, { method: 'POST' });
-    setStatus(`Discovery: groups ${get(data, 'groupsUpserted', 'GroupsUpserted')}, relations ${get(data, 'relationsUpserted', 'RelationsUpserted')}`, 'ok');
+    setStatus(`Синхронизировано: справочников ${get(data, 'groupsUpserted', 'GroupsUpserted')}, связей ${get(data, 'relationsUpserted', 'RelationsUpserted')}`, 'ok');
     await refreshAll();
   }
 
   async function runBootstrap() {
-    setStatus('Bootstrap ProjectCardViewer…');
+    setStatus('Создание начальных политик просмотра…');
     const data = await fetchJson(`/api/reporter/admin/bootstrap/project-card-viewer/${encodeURIComponent(sourceCode())}`, { method: 'POST' });
-    setStatus(`Bootstrap: groups ${get(data, 'groupPoliciesUpserted', 'GroupPoliciesUpserted')}, relations ${get(data, 'relationPoliciesUpserted', 'RelationPoliciesUpserted')}`, 'ok');
+    setStatus(`Начальные политики: справочников ${get(data, 'groupPoliciesUpserted', 'GroupPoliciesUpserted')}, связей ${get(data, 'relationPoliciesUpserted', 'RelationPoliciesUpserted')}`, 'ok');
     await refreshAll();
   }
 

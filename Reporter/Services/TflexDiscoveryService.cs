@@ -127,8 +127,8 @@ DECLARE @RelationPolicies table(x int);
 MERGE app.GroupAccessPolicy AS target
 USING (
     SELECT @SourceId AS SourceId, @RoleId AS AppRoleId, GroupId, TableName,
-           CASE WHEN TableName = N'Kartochka_proekta' THEN 1 ELSE 0 END AS CanSeeInMenu,
-           CASE WHEN TableName IN (N'Kartochka_proekta', N'Nomenclature') THEN 1 ELSE 0 END AS CanSearch,
+           CASE WHEN TableName IN (N'Kartochka_proekta', N'Nomenclature', N'Documents', N'Files') THEN 1 ELSE 0 END AS CanSeeInMenu,
+           CASE WHEN TableName IN (N'Kartochka_proekta', N'Nomenclature', N'Documents', N'Files') THEN 1 ELSE 0 END AS CanSearch,
            1 AS CanOpenCard,
            0 AS CanExport,
            2 AS MaxObjectDepth,

@@ -34,7 +34,7 @@ public sealed class ReporterUiController : ControllerBase
             defaultFileDepth = 4,
             defaultPageSize = 50,
             maxPageSize = 100,
-            uiVersion = "stage-5a",
+            uiVersion = "этап-7",
             federatedSearchUrl = "/api/reporter/project-cards/search",
             securityMode = _options.SecurityMode,
             securityPreviewUrl = "/api/reporter/security"

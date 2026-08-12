@@ -346,3 +346,81 @@ public sealed record ReporterAdminRelationPolicyUpdateDto(
 public sealed record ReporterAdminMutationResultDto(
     string Status,
     string Message);
+
+// Этап 7: универсальный просмотр справочников и иерархических объектов.
+// GroupId остается локальным идентификатором конкретного source, а GroupGuid
+// хранится вместе с source binding и не используется как единственный ключ.
+public sealed record ReporterReferenceCatalogSourceDto(
+    string SourceCode,
+    string SourceDisplayName,
+    int GroupId,
+    string? GroupGuid,
+    int? HierarchyType,
+    bool CanSearch,
+    bool CanOpenCard,
+    int MaxRowsPerPage);
+
+public sealed record ReporterReferenceCatalogItemDto(
+    string Key,
+    string TableName,
+    string Caption,
+    string? CommonGroupGuid,
+    bool IsHierarchical,
+    IReadOnlyList<ReporterReferenceCatalogSourceDto> Sources);
+
+public sealed record ReporterReferenceFieldDto(
+    string Name,
+    string Label,
+    string DataType,
+    bool IsNullable,
+    bool IsSystem,
+    bool IsPrimaryDisplay,
+    bool IsSearchable,
+    int SortOrder);
+
+public sealed record ReporterReferenceSchemaDto(
+    string SourceCode,
+    string SourceDisplayName,
+    int GroupId,
+    string? GroupGuid,
+    string TableName,
+    string Caption,
+    bool HasHierarchy,
+    string? CodeField,
+    string? NameField,
+    int MaxRowsPerPage,
+    IReadOnlyList<ReporterReferenceFieldDto> Fields);
+
+public sealed record ReporterReferenceObjectRowDto(
+    long ObjectId,
+    string? Guid,
+    long? ParentId,
+    bool HasChildren,
+    string? ObjectCode,
+    string? Name,
+    string? DocsUrl,
+    IReadOnlyDictionary<string, string?> Values);
+
+public sealed record ReporterReferenceItemsPageDto(
+    string SourceCode,
+    int GroupId,
+    string TableName,
+    string Caption,
+    bool HasHierarchy,
+    string? Query,
+    long? ParentId,
+    int Page,
+    int PageSize,
+    bool HasMore,
+    bool IsSearchResult,
+    IReadOnlyList<ReporterReferenceObjectRowDto> Items,
+    IReadOnlyList<string> Warnings);
+
+public sealed record ReporterReferenceObjectDto(
+    string SourceCode,
+    int GroupId,
+    string TableName,
+    string Caption,
+    ReporterReferenceObjectRowDto Object,
+    IReadOnlyList<ReporterReferenceFieldDto> Fields);
+

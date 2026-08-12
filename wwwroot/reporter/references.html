@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs Reporter — справочники</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="references-page">
+  <main class="references-shell">
+    <header class="security-header">
+      <div>
+        <span class="breadcrumb">Docs Reporter / Справочники</span>
+        <h1>Универсальный просмотр справочников</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="swagger-link" href="./index.html">Карточки проектов</a>
+        <a class="swagger-link" href="./admin.html">Управление</a>
+        <a class="swagger-link" href="./security.html">Права</a>
+        <a class="swagger-link" href="/swagger" target="_blank" rel="noreferrer">Описание API</a>
+      </div>
+    </header>
+
+    <section class="security-notice">
+      <strong>Этап 7.</strong>
+      Справочники собираются из разрешенных политик репортера. Локальный ID хранится отдельно для каждого сервера,
+      а UUID используется как дополнительный идентификатор. Иерархические таблицы раскрываются по <code>s_ParentID</code>.
+    </section>
+
+    <section class="panel references-controls">
+      <label>
+        <span>Источник</span>
+        <select id="referenceSource"></select>
+      </label>
+      <label>
+        <span>Справочник</span>
+        <select id="referenceGroup"></select>
+      </label>
+      <label class="reference-search-field">
+        <span>Поиск в справочнике</span>
+        <input id="referenceQuery" type="search" placeholder="Обозначение или наименование" />
+      </label>
+      <label>
+        <span>Строк на странице</span>
+        <select id="referencePageSize">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+      <button id="referenceSearch" class="primary-btn" type="button">Найти</button>
+      <button id="referenceReset" class="ghost-btn" type="button">Сбросить</button>
+    </section>
+
+    <section id="referenceStatus" class="status-log security-status">Загрузка каталога…</section>
+
+    <section class="references-grid">
+      <aside class="panel references-catalog-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Доступные справочники</h2>
+            <span id="referenceCatalogMeta" class="panel-meta">Нет данных</span>
+          </div>
+        </div>
+        <div id="referenceCatalog" class="references-catalog"></div>
+      </aside>
+
+      <section class="panel references-table-panel">
+        <div class="panel-header references-table-header">
+          <div>
+            <h2 id="referenceTitle">Объекты</h2>
+            <span id="referenceMeta" class="panel-meta">Выберите справочник</span>
+          </div>
+          <div class="reference-pager">
+            <button id="referencePrev" class="ghost-btn" type="button">← Назад</button>
+            <span id="referencePageLabel">Страница 1</span>
+            <button id="referenceNext" class="ghost-btn" type="button">Вперед →</button>
+          </div>
+        </div>
+        <div id="referenceWarnings" class="reference-warnings"></div>
+        <div id="referenceTable" class="references-table-wrap">
+          <div class="security-empty">Выберите справочник слева.</div>
+        </div>
+      </section>
+
+      <aside class="panel references-detail-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Карточка объекта</h2>
+            <span id="referenceDetailMeta" class="panel-meta">Объект не выбран</span>
+          </div>
+        </div>
+        <div id="referenceDetail" class="references-detail">
+          <div class="security-empty">Нажмите на строку, чтобы увидеть параметры.</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script src="./references.js" defer></script>
+</body>
+</html>
