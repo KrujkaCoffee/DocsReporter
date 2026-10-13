@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Reporter/Product/ProductExplorerModel.cs" Link="ProductExplorerModel.cs" />
+    <Compile Include="../../Reporter/Product/ProductExplorerOptions.cs" Link="ProductExplorerOptions.cs" />
+    <Compile Include="../../Reporter/Product/ProductSql.cs" Link="ProductSql.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Изделие — Docs Reporter</title>
+  <link rel="stylesheet" href="./product.css">
+  <script src="./product-model.js" defer></script>
+  <script src="./product.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div><span class="brand">DOCS / ПРОСМОТР</span><h1>Изделие</h1></div>
+  <a href="./index.html">Вернуться к карточкам</a>
+</header>
+<div class="pilot-note">Проверка состава и файлов. Только сохранённые данные. Скачивание и промышленный доступ будут включены после проверки авторизации.</div>
+<main class="workspace">
+  <aside class="panel search-panel">
+    <h2>Карточки проектов</h2>
+    <form id="searchForm">
+      <label for="source">Источник</label><select id="source" required></select>
+      <label for="query">Обозначение или наименование</label>
+      <input id="query" type="search" placeholder="Например, КТ.1204113.39" minlength="2" maxlength="200" autocomplete="off" required>
+      <button type="submit" id="searchButton">Найти</button>
+    </form>
+    <p id="searchStatus" class="hint" role="status" aria-live="polite">Загрузка источников…</p>
+    <div id="cards" class="card-list"></div>
+    <button id="moreCards" class="secondary" hidden>Показать ещё</button>
+  </aside>
+  <section class="main-content">
+    <section class="panel card-header">
+      <span class="eyebrow">КАРТОЧКА ПРОЕКТА</span>
+      <h2 id="cardCode">Выберите карточку</h2><p id="cardName">Поиск выполняется в выбранном источнике.</p>
+      <div id="rootChooser" hidden><label for="productRoot">Назначенное изделие</label><select id="productRoot"></select></div>
+      <div class="context-line"><span id="contextSource"></span><span id="asOf"></span></div>
+      <p id="cardStatus" class="hint" role="status" aria-live="polite"></p>
+    </section>
+    <div class="detail-grid">
+      <section class="panel structure-panel">
+        <div class="panel-title"><h2>Состав ЭСИ</h2><button id="rootFiles" class="text-button" disabled>Файлы корня</button></div>
+        <p class="hint">Раскрывайте состав по одному уровню. Выберите элемент для просмотра его собственных файлов.</p>
+        <div id="tree" class="tree"><p class="empty">Изделие ещё не выбрано.</p></div>
+      </section>
+      <section class="panel files-panel">
+        <h2>Сведения и файлы</h2>
+        <h3 id="selectedCode">—</h3><p id="selectedName" class="owner"></p>
+        <dl id="occurrence" class="properties"></dl>
+        <div class="tabs" role="tablist" aria-label="Формат файлов">
+          <button type="button" class="tab active" role="tab" aria-selected="true" data-category="pdf">PDF</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-category="dxf">DXF</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-category="cad">CAD</button>
+        </div>
+        <label id="fileRootLabel" for="fileRoot" hidden>Назначенная папка</label><select id="fileRoot" hidden></select>
+        <div class="folder-toolbar"><button id="folderBack" class="text-button" disabled>← Назад</button><span id="folderName"></span></div>
+        <p id="fileStatus" class="hint" role="status" aria-live="polite">Выберите изделие.</p>
+        <div class="file-table-wrap"><table><thead><tr><th>Наименование</th><th>Тип</th><th>Версия</th><th>Размер</th></tr></thead><tbody id="files"></tbody></table></div>
+        <button id="moreFiles" class="secondary" hidden>Показать ещё</button>
+      </section>
+    </div>
+  </section>
+</main>
+</body>
+</html>

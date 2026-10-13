@@ -1,3 +1,4 @@
+using DocsApi.Reporter.Product;
 using DocsApi.Configurations;
 using DocsApi.Data;
 using DocsApi.Reporter.Infrastructure;
@@ -9,6 +10,9 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.Configure<ProductExplorerOptions>(builder.Configuration.GetSection("Reporter:ProductExplorer"));
+builder.Services.AddScoped<ProductExplorerService>();
+builder.Services.AddScoped<ProductPilotFilter>();
 
 builder.Services.Configure<FileSettings>(
     builder.Configuration.GetSection("FileServerSettings"));
@@ -82,5 +86,7 @@ app.MapGet("/reporter/security", () => Results.Redirect("/reporter/security.html
 app.MapGet("/reporter/admin", () => Results.Redirect("/reporter/admin.html"));
 app.MapGet("/reporter/references", () => Results.Redirect("/reporter/references.html"));
 app.MapGet("/reporter/spravochniki", () => Results.Redirect("/reporter/references.html"));
+
+app.MapGet("/reporter/product", () => Results.Redirect("/reporter/product.html"));
 
 app.Run();

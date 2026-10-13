@@ -1,0 +1,25 @@
+{
+  "Reporter": {
+    "ProductExplorer": {
+      "Enabled": true,
+      "AllowAnonymousInDevelopment": true,
+      "PageSize": 50,
+      "MaxDepth": 16,
+      "MaxRoots": 20,
+      "MaxScanRows": 200,
+      "CommandTimeoutSeconds": 20,
+      "Sources": {
+        "tdocs": {
+          "ExpectedServer": "SRV-TDOCS",
+          "ExpectedDatabase": "TFlexDOCsOne",
+          "FolderClassIds": [79],
+          "FileClassIds": [82, 110],
+          "StructureTypeIds": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+          "ExcludedProductClassIds": [696, 697],
+          "ProductStructureId": 0,
+          "DesignContextId": 0
+        }
+      }
+    }
+  }
+}

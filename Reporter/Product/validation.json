@@ -1,0 +1,22 @@
+{
+  "baseCommit": "9c67dc7899bc83166193a19b1a9daf9e72e2249c",
+  "baseTree": "e14a58328b78c214a6747d5d669e516505b1ba76",
+  "source": "tdocs",
+  "server": "SRV-TDOCS",
+  "database": "TFlexDOCsOne",
+  "sourceBindingEvidence": "Explicit user confirmation; latest seven CSV files only",
+  "notUsedAsTdocs": "Older *.sql project dumps; 01 source row executed in master; PKB tec.json",
+  "validation": {
+    "jsSyntax": "passed",
+    "jsUnitTests": 12,
+    "offlineDomScenarios": 12,
+    "offlineDomCaveat": "MOCK API; location/history adapted for about:blank. Real HTTP navigation blocked by browser environment.",
+    "dotnetBuild": "not_run: SDK unavailable",
+    "csharpChecks": "provided, not_run: SDK unavailable",
+    "sqlExecution": "not_run: no connection to user MSSQL",
+    "winAuth": "not_run; production gate stays closed"
+  },
+  "remoteWrites": "none",
+  "runtimeEnableDefault": false,
+  "runtimeEnvironment": "Development only"
+}
