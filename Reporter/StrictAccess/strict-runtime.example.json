@@ -1,0 +1,24 @@
+{
+  "Reporter": {
+    "SecurityMode": "TflexRead",
+    "DebugWindowsLogin": null,
+    "DebugWindowsSid": null,
+    "AdminAllowAnonymousInPreview": false,
+    "ProductExplorer": {
+      "Enabled": true,
+      "AllowAnonymousInDevelopment": false
+    },
+    "StrictRuntime": {
+      "MaxAclRows": 10000,
+      "MaxPrincipalNodes": 1024,
+      "MaxHierarchyDepth": 32,
+      "SqlTimeoutSeconds": 15,
+      "AuditTimeoutSeconds": 5,
+      "ProvisionNewUsers": true,
+      "AllowDomainLoginFallback": false,
+      "TrustedLoginDomains": [],
+      "AdministratorSids": [],
+      "VerifiedObjectReadCommands": {}
+    }
+  }
+}

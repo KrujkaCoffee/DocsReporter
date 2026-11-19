@@ -1,3 +1,4 @@
+using DocsApi.Reporter.StrictAccess;
 using DocsApi.Reporter.Product;
 using DocsApi.Configurations;
 using DocsApi.Data;
@@ -9,7 +10,10 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.AddService<StrictAuditResultFilter>());
+builder.Services.Configure<StrictRuntimeOptions>(builder.Configuration.GetSection("Reporter:StrictRuntime"));
+builder.Services.AddScoped<RequestAudit>();
+builder.Services.AddScoped<StrictAuditResultFilter>();
 builder.Services.Configure<ProductExplorerOptions>(builder.Configuration.GetSection("Reporter:ProductExplorer"));
 builder.Services.AddScoped<ProductExplorerService>();
 builder.Services.AddScoped<ProductPilotFilter>();
@@ -32,7 +36,10 @@ builder.Services.AddScoped<IProjectCardFileExplorerService, ProjectCardFileExplo
 builder.Services.AddScoped<IFederatedProjectCardSearchService, FederatedProjectCardSearchService>();
 builder.Services.AddScoped<IReporterIdentityService, ReporterIdentityService>();
 builder.Services.AddScoped<ITflexAccessPreviewService, TflexAccessPreviewService>();
-builder.Services.AddScoped<ITflexAccessDecisionService, TflexAccessDecisionService>();
+// Legacy heuristic service is deliberately NOT registered.
+builder.Services.AddScoped<StrictReadService>();
+builder.Services.AddScoped<ITflexAccessDecisionService>(sp => sp.GetRequiredService<StrictReadService>());
+builder.Services.AddScoped<IStrictReferenceGate>(sp => sp.GetRequiredService<StrictReadService>());
 builder.Services.AddScoped<IReporterAdminCatalogService, ReporterAdminCatalogService>();
 builder.Services.AddScoped<IReporterReferenceBrowserService, ReporterReferenceBrowserService>();
 
@@ -50,7 +57,11 @@ builder.Services
     .AddAuthentication(NegotiateDefaults.AuthenticationScheme)
     .AddNegotiate();
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser().Build();
+});
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -62,31 +73,21 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// New binary has no anonymous/Preview opt-out. Fail early on obsolete debug settings.
+var oldOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ReporterOptions>>().Value;
+var productOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ProductExplorerOptions>>().Value;
+if (!string.IsNullOrWhiteSpace(oldOptions.DebugWindowsLogin) || !string.IsNullOrWhiteSpace(oldOptions.DebugWindowsSid)
+    || productOptions.AllowAnonymousInDevelopment)
+    throw new InvalidOperationException("Удалите DebugWindowsLogin/DebugWindowsSid и отключите AllowAnonymousInDevelopment перед запуском строгого режима.");
 
 app.UseHttpsRedirection();
-
-// Reporter UI is a static, read-only shell over the reporter API.
-// Open: /reporter or /reporter/index.html
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
 app.UseRouting();
-
-// ВАЖНО: до MapControllers
 app.UseAuthentication();
+// Before static files, authorization, MVC and any legacy endpoint.
+// [AllowAnonymous] on an old controller cannot bypass this boundary.
+app.UseMiddleware<StrictPerimeterMiddleware>();
 app.UseAuthorization();
-
+app.UseStaticFiles();
 app.MapControllers();
-
-app.MapGet("/", () => Results.Redirect("/reporter/index.html"));
-app.MapGet("/reporter", () => Results.Redirect("/reporter/index.html"));
-app.MapGet("/reporter/security", () => Results.Redirect("/reporter/security.html"));
-app.MapGet("/reporter/admin", () => Results.Redirect("/reporter/admin.html"));
-app.MapGet("/reporter/references", () => Results.Redirect("/reporter/references.html"));
-app.MapGet("/reporter/spravochniki", () => Results.Redirect("/reporter/references.html"));
-
-app.MapGet("/reporter/product", () => Results.Redirect("/reporter/product.html"));
-
+// Root aliases are redirected by the protected perimeter. Swagger and legacy pages are not exposed.
 app.Run();

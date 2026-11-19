@@ -11,16 +11,16 @@
 <body>
 <header class="topbar">
   <div><span class="brand">DOCS / ПРОСМОТР</span><h1>Изделие</h1></div>
-  <a href="./index.html">Вернуться к карточкам</a>
+  <span id="currentUser" aria-live="polite"></span>
 </header>
-<div class="pilot-note">Проверка состава и файлов. Только сохранённые данные. Скачивание и промышленный доступ будут включены после проверки авторизации.</div>
+
 <main class="workspace">
   <aside class="panel search-panel">
     <h2>Карточки проектов</h2>
     <form id="searchForm">
       <label for="source">Источник</label><select id="source" required></select>
       <label for="query">Обозначение или наименование</label>
-      <input id="query" type="search" placeholder="Например, КТ.1204113.39" minlength="2" maxlength="200" autocomplete="off" required>
+      <input id="query" type="search" placeholder="Введите обозначение или наименование" minlength="2" maxlength="200" autocomplete="off" required>
       <button type="submit" id="searchButton">Найти</button>
     </form>
     <p id="searchStatus" class="hint" role="status" aria-live="polite">Загрузка источников…</p>

@@ -4,6 +4,10 @@
   const $ = id => document.getElementById(id);
   const base = new URL("../../", window.location.href);
   const initial = new URLSearchParams(window.location.search);
+  fetch(new URL("api/reporter/strict/me", base), { credentials: "same-origin", cache: "no-store" })
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(me => { $("currentUser").textContent = me.name || ""; })
+    .catch(() => { $("currentUser").textContent = "Вход через Windows"; });
   const state = { source: "", query: "", card: null, root: null, roots: [], asOf: "", path: [], selected: null,
     category: "pdf", folderPath: [], searchCursor: null, fileCursor: null, cardEpoch: 0, searchEpoch: 0, fileEpoch: 0 };
   const requests = new Map();

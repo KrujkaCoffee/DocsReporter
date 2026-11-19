@@ -1,4 +1,5 @@
 using System.Data;
+using DocsApi.Reporter.StrictAccess;
 using System.Security.Claims;
 using DocsApi.Reporter.Dto;
 using DocsApi.Reporter.Infrastructure;
@@ -20,46 +21,56 @@ public sealed class ReporterAccessService : IReporterAccessService
 {
     private readonly IReporterSqlConnectionFactory _factory;
     private readonly ReporterOptions _options;
+    private readonly StrictRuntimeOptions _runtime;
+    private readonly Dictionary<string, int> _requestUsers = new(StringComparer.OrdinalIgnoreCase);
 
-    public ReporterAccessService(IReporterSqlConnectionFactory factory, IOptions<ReporterOptions> options)
+    public ReporterAccessService(IReporterSqlConnectionFactory factory, IOptions<ReporterOptions> options, IOptions<StrictRuntimeOptions> runtime)
     {
         _factory = factory;
         _options = options.Value;
+        _runtime = runtime.Value;
     }
 
     public async Task<int> EnsureAppUserAsync(ClaimsPrincipal user, CancellationToken ct)
     {
-        var principal = ReporterPrincipalResolver.Resolve(user, _options);
-        var login = principal.Login;
-        var sid = principal.Sid;
-
+        var actor = RuntimePrincipal.Read(user) ?? throw new UnauthorizedAccessException();
+        if (_requestUsers.TryGetValue(actor.Sid, out var existing)) return existing;
         await using var cn = await _factory.OpenAppConnectionAsync(ct);
-        await using var cmd = cn.CreateCommand();
+        await using var tx = (SqlTransaction)await cn.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        await using var cmd = cn.CreateCommand(); cmd.Transaction = tx; cmd.CommandTimeout = 15;
         cmd.CommandText = @"
-DECLARE @User table (AppUserId int);
-
-MERGE app.AppUser AS target
-USING (SELECT @login AS WindowsLogin, @sid AS WindowsSid) AS src
-ON target.WindowsLogin = src.WindowsLogin
-WHEN MATCHED THEN UPDATE SET WindowsSid = COALESCE(src.WindowsSid, target.WindowsSid)
-WHEN NOT MATCHED THEN INSERT(WindowsLogin, WindowsSid, IsEnabled) VALUES(src.WindowsLogin, src.WindowsSid, 1)
-OUTPUT inserted.AppUserId INTO @User;
-
-DECLARE @AppUserId int = (SELECT TOP (1) AppUserId FROM @User);
-DECLARE @RoleId int = (SELECT AppRoleId FROM app.AppRole WHERE Code = @defaultRoleCode);
-
-IF @RoleId IS NOT NULL
-AND NOT EXISTS (SELECT 1 FROM app.AppUserRole WHERE AppUserId = @AppUserId AND AppRoleId = @RoleId)
+DECLARE @id int, @count int, @oldSid nvarchar(255), @enabled bit;
+SELECT @count=COUNT(*),@id=MIN(AppUserId) FROM app.AppUser WITH(UPDLOCK,HOLDLOCK)
+ WHERE WindowsSid=@sid OR WindowsLogin=@login;
+IF @count>1 THROW 51082,N'Неоднозначное сопоставление пользователя репортера.',1;
+IF @count=1
 BEGIN
-    INSERT INTO app.AppUserRole(AppUserId, AppRoleId) VALUES(@AppUserId, @RoleId);
+ SELECT @oldSid=WindowsSid,@enabled=IsEnabled FROM app.AppUser WHERE AppUserId=@id;
+ IF @enabled IS NULL OR @enabled=0 THROW 51083,N'Учётная запись репортера отключена.',1;
+ IF NULLIF(LTRIM(RTRIM(@oldSid)),N'') IS NOT NULL AND @oldSid<>@sid
+   THROW 51084,N'SID не совпадает с ранее сохранённой учётной записью.',1;
+ UPDATE app.AppUser SET WindowsLogin=@login,WindowsSid=@sid WHERE AppUserId=@id;
 END
-
-SELECT @AppUserId;";
-        cmd.Parameters.Add(new SqlParameter("@login", SqlDbType.NVarChar, 255) { Value = login });
-        cmd.Parameters.Add(new SqlParameter("@sid", SqlDbType.NVarChar, 255) { Value = (object?)sid ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@defaultRoleCode", SqlDbType.NVarChar, 100) { Value = _options.DefaultRoleCode });
-
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+ELSE
+BEGIN
+ IF @provision=0 THROW 51085,N'Пользователь репортера не зарегистрирован.',1;
+ INSERT INTO app.AppUser(WindowsLogin,WindowsSid,IsEnabled) VALUES(@login,@sid,1);
+ SET @id=CONVERT(int,SCOPE_IDENTITY());
+ -- Only on first creation; removed roles are NOT re-created on subsequent requests.
+ INSERT INTO app.AppUserRole(AppUserId,AppRoleId)
+ SELECT @id,AppRoleId FROM app.AppRole WHERE Code=N'ProjectCardViewer';
+END;
+SELECT @id;";
+        cmd.Parameters.Add(new SqlParameter("@login", SqlDbType.NVarChar, 255) { Value=actor.Login });
+        cmd.Parameters.Add(new SqlParameter("@sid", SqlDbType.NVarChar, 255) { Value=actor.Sid });
+        cmd.Parameters.Add(new SqlParameter("@provision", SqlDbType.Bit) { Value=_runtime.ProvisionNewUsers });
+        try
+        {
+            var id = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+            await tx.CommitAsync(ct); _requestUsers[actor.Sid]=id; return id;
+        }
+        catch (SqlException ex) when (ex.Number is >= 51082 and <= 51085)
+        { throw new UnauthorizedAccessException("Учётная запись не подтверждена или отключена.", ex); }
     }
 
     public async Task<EffectiveGroupAccessDto?> GetGroupAccessAsync(ClaimsPrincipal user, string sourceCode, int groupId, CancellationToken ct)
@@ -84,7 +95,7 @@ JOIN app.AppUserRole ur ON ur.AppRoleId = p.AppRoleId
 WHERE ur.AppUserId = @appUserId
   AND p.IsEnabled = 1
   AND p.GroupId = @groupId
-  AND (p.SourceId IS NULL OR p.SourceId = @SourceId);";
+  AND p.SourceId = @SourceId;";
         cmd.Parameters.Add(new SqlParameter("@sourceCode", SqlDbType.NVarChar, 100) { Value = sourceCode });
         cmd.Parameters.Add(new SqlParameter("@groupId", SqlDbType.Int) { Value = groupId });
         cmd.Parameters.Add(new SqlParameter("@appUserId", SqlDbType.Int) { Value = appUserId });
@@ -123,7 +134,7 @@ JOIN app.AppUserRole ur ON ur.AppRoleId = p.AppRoleId
 WHERE ur.AppUserId = @appUserId
   AND p.IsEnabled = 1
   AND p.CanTraverse = 1
-  AND (p.SourceId IS NULL OR p.SourceId = @SourceId)
+  AND p.SourceId = @SourceId
   AND EXISTS (
       SELECT 1
       FROM app.TflexRelation r
@@ -178,7 +189,7 @@ JOIN app.AppUserRole ur ON ur.AppRoleId = p.AppRoleId
 WHERE ur.AppUserId = @appUserId
   AND p.IsEnabled = 1
   AND p.CanTraverse = 1
-  AND (p.SourceId IS NULL OR p.SourceId = @SourceId)
+  AND p.SourceId = @SourceId
   AND EXISTS (
       SELECT 1
       FROM app.TflexRelation r
