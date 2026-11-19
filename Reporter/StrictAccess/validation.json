@@ -1,0 +1,22 @@
+{
+  "baseCommit": "1981018b25fe193953f9968c67917940db39f1d2",
+  "baseTreeVerified": "ef789cf25d25f2d20e679df1d4c7289695d758b6",
+  "scope": "WinAuth + restrictive access + SQL request audit; isolated deployment only",
+  "dotnetBuild": "NOT_RUN: no .NET SDK in environment",
+  "csharpChecks": "NOT_RUN: execute scripts/Check-StrictStage.ps1",
+  "liveMssql": "NOT_RUN",
+  "windowsAuthIis": "NOT_RUN",
+  "httpIntegration": "NOT_RUN",
+  "javascriptSyntax": "PASS",
+  "nodeTests": {
+    "passed": 12
+  },
+  "pythonOfflineChecks": {
+    "passed": 20,
+    "kind": "Python reference model and source invariants; NOT C# execution",
+    "anonymizedRegressionCases": 27,
+    "regressionResult": "all Indeterminate (no access)"
+  },
+  "legacyIntegration": "Not migrated. Legacy routes are blocked in NEW instance. Keep prior integration host unchanged.",
+  "unknownRules": "Deny by default; no implied native DOCs ACL equivalence"
+}

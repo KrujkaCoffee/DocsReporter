@@ -12,12 +12,13 @@ public sealed class ReporterOptions
     public int FederatedSourceTimeoutSeconds { get; set; } = 15;
     public int FederatedMaxPageSize { get; set; } = 100;
 
+    // Legacy options retained for old diagnostic code. The strict runtime never bypasses checks.
     // Security modes:
     // Disabled  - security diagnostics are disabled, reporter endpoints stay permissive.
     // Preview   - identity and xAccessRights are visible in diagnostics, but are not enforced.
     // AppPolicy - app.GroupAccessPolicy/app.RelationAccessPolicy are enforced.
     // TflexRead - app policies plus source-scoped T-FLEX read rights are enforced.
-    public string SecurityMode { get; set; } = "Preview";
+    public string SecurityMode { get; set; } = "TflexRead";
     public string? DebugWindowsLogin { get; set; }
     public string? DebugWindowsSid { get; set; }
     public int SecurityMaxHierarchyDepth { get; set; } = 16;
@@ -32,7 +33,7 @@ public sealed class ReporterOptions
 
     // Stage 6: lightweight reporter admin UI. In Preview mode it can be opened without Windows Auth
     // to keep manual testing simple. In AppPolicy/TflexRead modes admin endpoints require ReportAdmin or Developer role.
-    public bool AdminAllowAnonymousInPreview { get; set; } = true;
+    public bool AdminAllowAnonymousInPreview { get; set; } = false;
     public int AdminDefaultTake { get; set; } = 200;
 
     // Этап 7: безопасный универсальный просмотр справочников.

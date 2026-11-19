@@ -1,0 +1,51 @@
+using DocsApi.Reporter.StrictAccess;
+using System.Text.Json;
+var resource = new StrictResource(10, 100, 90, true, 0, 0, 0, false);
+var principals = new HashSet<long> { 2, 3 };
+var allow = new StrictAclRow(2, 4, 3, 10, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+var group = new StrictAccessGroup(2, new Dictionary<int, bool?> { [1] = true });
+var groups = new Dictionary<int, StrictAccessGroup> { [4] = group };
+var count = 0;
+void Check(bool actual, string name) { if (!actual) throw new Exception(name); count++; Console.WriteLine("PASS " + name); }
+StrictDecision Run(params StrictAclRow[] rows) => StrictAccessRules.Evaluate(resource, principals, true, new(true, rows, groups), 1);
+Check(!StrictAccessRules.Evaluate(resource,principals,true,new(true,new[]{allow},groups)).Allowed, "unverified read profile denied by default");
+Check(Run(allow).Allowed, "supported explicit positive");
+Check(!Run().Allowed, "no assignment never permits");
+Check(!Run(allow with { UserId=0 }).Allowed, "zero principal is not everyone");
+Check(!Run(allow with { AccessTypeId=1 }).Allowed, "reference command not object command");
+Check(!Run(allow with { AccessTypeId=7 }).Allowed, "unrecognized type blocks");
+Check(!Run(allow with { ObjectId=0 }).Allowed, "unverified global scope blocks");
+Check(!Run(allow with { XAccessObjectId=9 }).Allowed, "conditional access object blocks");
+Check(!Run(allow with { StageId=10 }).Allowed, "stage rule cannot permit read");
+Check(!Run(allow with { LinkId=12 }).Allowed, "link rule cannot permit read");
+Check(!Run(allow with { Direction=1 }).Allowed, "unverified direction blocks");
+Check(!Run(allow with { UserId=42 }).Allowed, "no membership never permits");
+Check(!Run(allow with { ReferenceId=11 }).Allowed, "other reference does not grant");
+Check(!Run(allow with { ObjectId=101 }).Allowed, "other object does not grant");
+Check(!StrictAccessRules.Evaluate(resource, principals, true, new(false, new[]{allow}, groups), 1).Allowed, "truncation blocks");
+Check(!StrictAccessRules.Evaluate(resource, principals, false, new(true, new[]{allow}, groups), 1).Allowed, "unverified identity blocks");
+Check(!StrictAccessRules.Evaluate(resource with {AccessObjectId=0}, principals, true, new(true,new[]{allow},groups), 1).Allowed, "zero area unresolved");
+Check(!StrictAccessRules.Evaluate(resource with {StageId=2}, principals, true, new(true,new[]{allow},groups), 1).Allowed, "resource stage unresolved");
+Check(!StrictAccessRules.Evaluate(resource with {AccessLevel=1}, principals, true, new(true,new[]{allow},groups), 1).Allowed, "mandatory level unresolved");
+Check(!StrictAccessRules.Evaluate(resource with {Current=false}, principals, true, new(true,new[]{allow},groups), 1).Allowed, "noncurrent blocked");
+Check(!StrictAccessRules.Evaluate(resource,principals,true,new(true,new[]{allow},new Dictionary<int,StrictAccessGroup>()), 1).Allowed, "missing access level blocks");
+Check(!StrictAccessRules.Evaluate(resource,principals,true,new(true,new[]{allow},new Dictionary<int,StrictAccessGroup>{[4]=new(2,new Dictionary<int,bool?>())}), 1).Allowed,"missing command cannot use caption");
+Check(!StrictAccessRules.Evaluate(resource,principals,true,new(true,new[]{allow},new Dictionary<int,StrictAccessGroup>{[4]=new(2,new Dictionary<int,bool?>{[1]=false})}), 1).Allowed,"explicit deny blocks");
+var special = allow with { AccessTypeId=7, UserId=0, ObjectId=0 };
+Check(!Run(allow,special).Allowed && !Run(special,allow).Allowed,"allow cannot mask unknown; order independent");
+Check(StrictAccessRules.HasCycle(new[]{(1L,2L),(2L,3L),(3L,1L)}),"cycle detected");
+Check(!StrictAccessRules.HasCycle(new[]{(1L,2L),(1L,3L),(2L,4L),(3L,4L)}),"DAG multiple memberships retained");
+Check(!StrictAccessRules.ReferenceReady(10,principals,new(true,new[]{allow,special},groups),1).Allowed,"reference blocks before hidden data search");
+Check(StrictAccessRules.ReferenceReady(10,principals,new(true,new[]{allow},groups),1).Allowed,"ready gate does not replace object checks");
+var path=Path.Combine(AppContext.BaseDirectory,"strict-regression.json");
+var fixtures=JsonSerializer.Deserialize<RegressionSet>(File.ReadAllText(path))!;
+foreach(var f in fixtures.Cases)
+{
+    var source=fixtures.Sources.Single(s=>s.Id==f.SourceId);
+    var result=StrictAccessRules.Evaluate(f.Resource,f.Principals.ToHashSet(),true,new(true,source.Rows,source.Groups), 1);
+    Check(result.Outcome==StrictOutcome.Indeterminate && !result.Allowed,"27-case replay: "+f.Case);
+}
+Console.WriteLine($"{count} pure C# checks passed. This is NOT a live DOCs ACL/HTTP test.");
+record Regression(string Case,string SourceId,StrictResource Resource,long[] Principals);
+record RegressionSource(string Id,StrictAclRow[] Rows,Dictionary<int,StrictAccessGroup> Groups);
+record RegressionSet(Regression[] Cases,RegressionSource[] Sources);

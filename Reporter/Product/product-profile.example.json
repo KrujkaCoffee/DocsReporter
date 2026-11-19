@@ -2,7 +2,7 @@
   "Reporter": {
     "ProductExplorer": {
       "Enabled": true,
-      "AllowAnonymousInDevelopment": true,
+      "AllowAnonymousInDevelopment": false,
       "PageSize": 50,
       "MaxDepth": 16,
       "MaxRoots": 20,

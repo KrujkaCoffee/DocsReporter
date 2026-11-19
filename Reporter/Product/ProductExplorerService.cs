@@ -1,4 +1,5 @@
 using System.Data;
+using DocsApi.Reporter.StrictAccess;
 using System.Globalization;
 using System.Security.Claims;
 using DocsApi.Reporter.Dto;
@@ -20,12 +21,13 @@ public sealed class ProductExplorerService
     private readonly IReporterSqlConnectionFactory _factory;
     private readonly IReporterAccessService _access;
     private readonly ITflexAccessDecisionService _decisions;
+    private readonly IStrictReferenceGate _referenceGate;
     private readonly ProductExplorerOptions _options;
 
     public ProductExplorerService(IReporterSqlConnectionFactory factory, IReporterAccessService access,
-        ITflexAccessDecisionService decisions, IOptions<ProductExplorerOptions> options)
+        ITflexAccessDecisionService decisions, IOptions<ProductExplorerOptions> options, IStrictReferenceGate referenceGate)
     {
-        _factory = factory; _access = access; _decisions = decisions; _options = options.Value;
+        _factory = factory; _access = access; _decisions = decisions; _options = options.Value; _referenceGate = referenceGate;
     }
 
     public async Task<IReadOnlyList<ProductSourceDto>> SourcesAsync(CancellationToken ct)
@@ -327,14 +329,16 @@ FROM dbo.{ProductSql.Q(ctx.Files.Table)} f WHERE f.s_ObjectID = @id AND {Product
             ctx.GroupAccess[id] = policy;
         }
         if (policy is null || (search ? !policy.CanSearch : !policy.CanOpenCard)) throw Forbidden();
+        await _referenceGate.RequireReadyAsync(user, ctx.Source, id, ct);
     }
 
     private async Task<bool> CanReadAsync(ClaimsPrincipal user, Context ctx, int group, long id, CancellationToken ct)
     {
         await RequireGroupAsync(user, ctx, group, false, ct);
-        if (!_decisions.ShouldEnforceTflexRead) return true;
         if (ctx.Decisions.TryGetValue((group, id), out var allowed)) return allowed;
         var result = await _decisions.CanReadAsync(user, ctx.Source, group, id, ct);
+        if (result.Status.Equals("Indeterminate", StringComparison.Ordinal))
+            throw new ProductExplorerProblem(403, "Не удалось подтвердить право просмотра. Данные не выданы.");
         ctx.Decisions[(group, id)] = result.Allowed;
         return result.Allowed;
     }
@@ -471,7 +475,7 @@ FROM dbo.ParameterGroups WHERE TableName IN ({string.Join(",", tables.Select((_,
     private static string Title(string category) => category.ToLowerInvariant() switch
     { "pdf" => "PDF", "dxf" => "DXF", "cad" => "CAD", _ => throw new ArgumentException("Неизвестный файловый раздел.") };
     private static void ValidateCursor(long cursor) { if (cursor < 0) throw new ArgumentException("Некорректное продолжение списка."); }
-    private static ProductExplorerProblem Forbidden() => new(403, "Просмотр недоступен. Проверьте разрешение раздела и права выбранного пользователя.");
+    private static ProductExplorerProblem Forbidden() => new(403, "Просмотр недоступен.");
     private static ProductExplorerProblem NotFound() => new(404, "Объект не найден в выбранном источнике или пути.");
     private static ProductExplorerProblem Ambiguous() => new(409, "Найдены неоднозначные актуальные строки. Загрузка остановлена для проверки данных.");
 

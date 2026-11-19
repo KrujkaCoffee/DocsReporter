@@ -1,9 +1,11 @@
 using DocsApi.Reporter.Product;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace DocsApi.Reporter.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/reporter/product")]
 [ServiceFilter(typeof(ProductPilotFilter))]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -56,7 +58,7 @@ public sealed class ReporterProductController : ControllerBase
         {
             _logger.LogError(ex, "Ошибка просмотра изделия. Источник {Source}; запрос {RequestId}",
                 RouteData.Values["sourceCode"], HttpContext.TraceIdentifier);
-            return StatusCode(503, new { error = "Загрузка недоступна. Проверьте профиль и схему источника в журнале сервера.", requestId = HttpContext.TraceIdentifier });
+            return StatusCode(503, new { error = "Загрузка недоступна. Обратитесь к администратору.", requestId = HttpContext.TraceIdentifier });
         }
     }
 }
